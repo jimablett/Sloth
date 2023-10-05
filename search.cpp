@@ -6,9 +6,10 @@
 #include "movegen.h"
 
 namespace Sloth {
+	int pvLength[64];
+	int pvTable[64][64];
+
 	int ply;
-	int bestMove;
-	int oldBest;
 
 	long nodes;
 
@@ -147,6 +148,8 @@ namespace Sloth {
 
 	inline int Search::negamax(int alpha, int beta, int depth, Position& pos) {
 		
+		pvLength[ply] = ply; // inits the PV length
+
 		// recursion escape condition
 		//if (depth == 0) return Eval::evaluate(pos);
 		if (depth == 0) return quiescence(alpha, beta, pos);
@@ -158,9 +161,6 @@ namespace Sloth {
 		if (kingCheck) depth++; // If the king is in check, then we increase ply depth by one to prevent immediately getting mated
 		
 		int legalMoves = 0;
-
-		int bestSoFar = 0;
-		int oldAlpha = alpha;
 
 		// At this point we are creating many movelists (Around the whole chess engine), so for later, consider generating every legal after a move has been played, so that we dont have to generate over and over again, in the same position
 		Movegen::MoveList moveList[1];
@@ -190,28 +190,28 @@ namespace Sloth {
 
 			// using fail-hard beta cutoff
 			if (score >= beta) {
-				killerMoves[1][ply] = killerMoves[0][ply];
-				killerMoves[0][ply] = moveList->moves[c];
+				if (getMoveCapture(moveList->moves[c]) == 0) {
+					killerMoves[1][ply] = killerMoves[0][ply];
+					killerMoves[0][ply] = moveList->moves[c];
+				}
 
 				return beta;
 			}
 
 			// if better move is found
 			if (score > alpha) {
-				historyMoves[getMovePiece(moveList->moves[c])][getMoveTarget(moveList->moves[c])] += depth;
+				if (getMoveCapture(moveList->moves[c]) == 0) 
+					historyMoves[getMovePiece(moveList->moves[c])][getMoveTarget(moveList->moves[c])] += depth;
 
 				alpha = score; //PV node
 
-				if (ply == 0) {
-					oldBest = bestSoFar;
+				pvTable[ply][ply] = moveList->moves[c];
 
-					bestSoFar = moveList->moves[c];
-
-					printf("best move so far: ");
-					Movegen::printMove(bestSoFar);
-					printf("\n");
-					printf("score: %d nodes: %ld\n", score, nodes);
+				for (int next = ply + 1; next < pvLength[ply + 1]; next++) {
+					pvTable[ply][next] = pvTable[ply + 1][next];
 				}
+
+				pvLength[ply] = pvLength[ply + 1];
 			}
 		}
 
@@ -224,10 +224,6 @@ namespace Sloth {
 				return 0;
 			}
 		}
-		if (oldAlpha != alpha) {
-			bestMove = bestSoFar;
-		}
-
 
 		return alpha; // move fails low
 	}
@@ -238,13 +234,18 @@ namespace Sloth {
 
 		int score = negamax(-50000, 50000, depth, pos);
 
-		if (bestMove) {
-			printf("info score cp %d depth %d nodes %ld\n", score, depth, nodes);
+		printf("info score cp %d depth %d nodes %ld pv ", score, depth, nodes);
 
-			printf("bestmove ");
-			Movegen::printMove(bestMove);
-			printf("\n");
+		for (int c = 0; c < pvLength[0]; c++) {
+			Movegen::printMove(pvTable[0][c]);
+			printf(" ");
 		}
+
+		printf("\n");
+
+		printf("bestmove ");
+		Movegen::printMove(pvTable[0][0]); // first element within PV table
+		printf("\n");
 
 		//printf("\nmove val: %d, old best:\n", bestMove);
 		//Movegen::printMove(oldBest);

@@ -39,9 +39,9 @@ namespace Sloth {
 		if (getMovePromotion(move)) {
 			Piece::Pieces promotion = static_cast<Piece::Pieces>(getMovePromotion(move));
 		
-			printf("%s%s%c\n", squareToCoordinates[getMoveSource(move)], squareToCoordinates[getMoveTarget(move)], promotedPieces[promotion]);
+			printf("%s%s%c", squareToCoordinates[getMoveSource(move)], squareToCoordinates[getMoveTarget(move)], promotedPieces[promotion]);
 		} else {
-			printf("%s%s\n", squareToCoordinates[getMoveSource(move)], squareToCoordinates[getMoveTarget(move)]);
+			printf("%s%s", squareToCoordinates[getMoveSource(move)], squareToCoordinates[getMoveTarget(move)]);
 		}
 	}
 
