@@ -164,4 +164,7 @@ static int MVV_LVA[12][12] = { // attacker, victim
     100, 200, 300, 400, 500, 600,  100, 200, 300, 400, 500, 600
 };
 
+//extern int killerMoves[2][64]; // id, ply
+//extern int historyMoves[12][64]; // piece, square
+
 #endif

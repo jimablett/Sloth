@@ -313,58 +313,5 @@ namespace Sloth {
 		printf("\n     a b c d e f g h\n\n");
 	}
 
-	Position& Position::LoadPosition(std::string& fen) {
-		int rank = 7; // Start with the 8th rank (top rank)
-		int file = 0; // Start with the a-file (leftmost file)
-
-		for (char c : fen) {
-			if (c == ' ') {
-				break; // Stop parsing at the end of the piece placement section
-			}
-			else if (c == '/') {
-				// Move to the next rank and reset the file
-				rank--;
-				file = 0;
-			}
-			else if (isdigit(c)) {
-				// Skip empty squares by advancing the file
-				file += (c - '0');
-			}
-			else {
-				U64* bitboard = nullptr;
-
-				switch (c) {
-				case 'P': bitboard = &Bitboards::whitePawns; break;
-				case 'N': bitboard = &Bitboards::whiteKnights; break;
-				case 'B': bitboard = &Bitboards::whiteBishops; break;
-				case 'R': bitboard = &Bitboards::whiteRooks; break;
-				case 'Q': bitboard = &Bitboards::whiteQueens; break;
-				case 'K': bitboard = &Bitboards::whiteKing; break;
-
-				case 'p': bitboard = &Bitboards::blackPawns; break;
-				case 'n': bitboard = &Bitboards::blackKnights; break;
-				case 'b': bitboard = &Bitboards::blackBishops; break;
-				case 'r': bitboard = &Bitboards::blackRooks; break;
-				case 'q': bitboard = &Bitboards::blackQueens; break;
-				case 'k': bitboard = &Bitboards::blackKing; break;
-
-				default:
-					break;
-				}
-
-				if (bitboard) {
-					// Calculate the squareIndex based on rank and file
-					int squareIndex = rank * 8 + file;
-					// Set the bit for the piece at the calculated squareIndex
-					setBit(*bitboard, squareIndex);
-				}
-
-				file++; // Move to the next file
-			}
-		}
-
-		return *this;
-	}
-
 	Position game;
 }

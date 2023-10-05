@@ -33,25 +33,7 @@ namespace Sloth {
 		extern U64 bitboards[12];
 		extern U64 occupancies[3]; // This will hold every piece on one bitboard. One for every white piece combined, one for black combined and one with every piece of both color on the bitboard
 
-		extern U64 whitePawns;
-		extern U64 whiteKnights;
-		extern U64 whiteBishops;
-		extern U64 whiteRooks;
-		extern U64 whiteQueens;
-		extern U64 whiteKing;
-
-		extern U64 blackPawns;
-		extern U64 blackKnights;
-		extern U64 blackBishops;
-		extern U64 blackRooks;
-		extern U64 blackQueens;
-		extern U64 blackKing;
-
-
 		void printBitboard(U64 bb, bool flip);
-
-		U64 getCombinedBitboard();
-		U64 getCombinedBitboard(std::vector<U64> &bb);
 
 		U64 maskPawnAttacks(int square, int side);
 		U64 maskKnightAttacks(int square);

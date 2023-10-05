@@ -12,6 +12,9 @@ namespace Sloth {
 
 	long nodes;
 
+	int killerMoves[2][64]; // id, ply
+	int historyMoves[12][64]; // piece, square
+
 	void Search::printMoveScores(Movegen::MoveList* moveList, Position& pos) {
 		for (int i = 0; i < moveList->count; i++) {
 			int move = moveList->moves[i];
@@ -41,10 +44,17 @@ namespace Sloth {
 				}
 			}
 
-			return MVV_LVA[getMovePiece(move)][targetPiece];
+			return MVV_LVA[getMovePiece(move)][targetPiece] + 10000;
 		}
 		else { // scoring quiet move
-
+			if (killerMoves[0][ply] == move) {
+				return 9000;
+			} else if (killerMoves[1][ply] == move) {
+				return 8000;
+			}
+			else {
+				return historyMoves[getMovePiece(move)][getMoveTarget(move)];
+			}
 		}
 
 		return 0;
@@ -180,18 +190,22 @@ namespace Sloth {
 
 			// using fail-hard beta cutoff
 			if (score >= beta) {
+				killerMoves[1][ply] = killerMoves[0][ply];
+				killerMoves[0][ply] = moveList->moves[c];
+
 				return beta;
 			}
 
 			// if better move is found
 			if (score > alpha) {
+				historyMoves[getMovePiece(moveList->moves[c])][getMoveTarget(moveList->moves[c])] += depth;
+
 				alpha = score; //PV node
 
 				if (ply == 0) {
 					oldBest = bestSoFar;
 
 					bestSoFar = moveList->moves[c];
-				
 
 					printf("best move so far: ");
 					Movegen::printMove(bestSoFar);

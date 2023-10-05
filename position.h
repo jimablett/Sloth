@@ -38,8 +38,6 @@ namespace Sloth {
 
 		// temp
 		void printAttackedSquares(int side);
-
-		Position& LoadPosition(std::string& fen);
 	};
 
 	extern Position game; // this game is going to be the class for every chess game that the engine plays

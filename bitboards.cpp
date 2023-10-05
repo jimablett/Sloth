@@ -19,21 +19,6 @@ namespace Sloth {
 	U64 Bitboards::bitboards[12];
 	U64 Bitboards::occupancies[3];
 
-	U64 Bitboards::whitePawns = 0;
-	U64 Bitboards::whiteKnights = 0;
-	U64 Bitboards::whiteBishops = 0;
-	U64 Bitboards::whiteRooks = 0;
-	U64 Bitboards::whiteQueens = 0;
-	U64 Bitboards::whiteKing = 0;
-
-	U64 Bitboards::blackPawns = 0;
-	U64 Bitboards::blackKnights = 0;
-	U64 Bitboards::blackBishops = 0;
-	U64 Bitboards::blackRooks = 0;
-	U64 Bitboards::blackQueens = 0;
-	U64 Bitboards::blackKing = 0;
-
-
 	void Bitboards::printBitboard(U64 bb, bool flip) {
 
 		// OLD
@@ -64,21 +49,6 @@ namespace Sloth {
 
 
 		printf("\n\nBitboard: %llud\n\n", bb);
-	}
-
-	U64 Bitboards::getCombinedBitboard() {
-		return (Bitboards::whitePawns | Bitboards::whiteKnights | Bitboards::whiteBishops | Bitboards::whiteRooks | Bitboards::whiteRooks | Bitboards::whiteQueens | Bitboards::whiteKing
-			| Bitboards::blackPawns | Bitboards::blackKnights | Bitboards::blackBishops | Bitboards::blackRooks | Bitboards::blackQueens | Bitboards::blackKing);
-	}
-
-	U64 Bitboards::getCombinedBitboard(std::vector<U64> &bb) {
-		U64 mergedBitboard = 0;
-
-		for (const U64 &bitboard : bb) {
-			mergedBitboard |= bitboard;
-		}
-
-		return mergedBitboard;
 	}
 
 	U64 Bitboards::maskPawnAttacks(int square, int side) {
