@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
     Magic::initAttacks();
     Bitboards::initLeaperAttacks();
 
-    int debug = 1;
+    int debug = 0;
 
     if (debug) {
         Position pos;
