@@ -154,6 +154,9 @@ namespace Sloth {
 		//if (depth == 0) return Eval::evaluate(pos);
 		if (depth == 0) return quiescence(alpha, beta, pos);
 
+		// preventing overflow of arrays
+		if (ply > MAX_PLY - 1) return Eval::evaluate(pos);
+
 		nodes++;
 
 		int kingCheck = pos.isSquareAttacked((pos.sideToMove == Colors::white) ? Bitboards::getLs1bIndex(Bitboards::bitboards[Piece::K]) : Bitboards::getLs1bIndex(Bitboards::bitboards[Piece::k]), pos.sideToMove ^ 1);
@@ -200,7 +203,7 @@ namespace Sloth {
 
 			// if better move is found
 			if (score > alpha) {
-				if (getMoveCapture(moveList->moves[c]) == 0) 
+				if (getMoveCapture(moveList->moves[c]) == 0) // this CAN be removed
 					historyMoves[getMovePiece(moveList->moves[c])][getMoveTarget(moveList->moves[c])] += depth;
 
 				alpha = score; //PV node
@@ -232,16 +235,28 @@ namespace Sloth {
 		// find the best move (32001 infinite value in stockfish)
 		//int score = negamax(-50000, 50000, depth, pos);
 
-		int score = negamax(-50000, 50000, depth, pos);
+		// clear out garbage
+		nodes = 0;
 
-		printf("info score cp %d depth %d nodes %ld pv ", score, depth, nodes);
+		memset(killerMoves, 0, sizeof(killerMoves));
+		memset(historyMoves, 0, sizeof(historyMoves));
+		memset(pvTable, 0, sizeof(pvTable));
+		memset(pvLength, 0, sizeof(pvLength)); // is this really needed?
 
-		for (int c = 0; c < pvLength[0]; c++) {
-			Movegen::printMove(pvTable[0][c]);
-			printf(" ");
+		// iterative deepening
+		for (int curDepth = 1; curDepth <= depth; curDepth++) {
+			int score = negamax(-50000, 50000, curDepth, pos);
+
+			printf("info score cp %d depth %d nodes %ld pv ", score, curDepth, nodes);
+
+			for (int c = 0; c < pvLength[0]; c++) {
+				Movegen::printMove(pvTable[0][c]);
+				printf(" ");
+			}
+
+			printf("\n");
 		}
 
-		printf("\n");
 
 		printf("bestmove ");
 		Movegen::printMove(pvTable[0][0]); // first element within PV table
