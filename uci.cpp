@@ -120,7 +120,7 @@ namespace Sloth {
 			}
 
 		}
-			pos.printBoard();
+		//pos.printBoard();
 
 		// free the allocated memory
 		delete[] cmdCpy;

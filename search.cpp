@@ -6,8 +6,13 @@
 #include "movegen.h"
 
 namespace Sloth {
+	const int fullDepthMoves = 4;
+	const int reductionLimit = 3;
+
 	int pvLength[64];
 	int pvTable[64][64];
+
+	int followPV, scorePV;
 
 	int ply;
 
@@ -15,6 +20,17 @@ namespace Sloth {
 
 	int killerMoves[2][64]; // id, ply
 	int historyMoves[12][64]; // piece, square
+
+	static inline void enablePVScoring(Movegen::MoveList* movelist) {
+		followPV = 0;
+
+		for (int i = 0; i < movelist->count; i++) {
+			if (pvTable[0][ply] == movelist->moves[i]) {
+				scorePV = 1;
+				followPV = 1;
+			}
+		}
+	}
 
 	void Search::printMoveScores(Movegen::MoveList* moveList, Position& pos) {
 		for (int i = 0; i < moveList->count; i++) {
@@ -28,7 +44,26 @@ namespace Sloth {
 		}
 	}
 
+	/*
+		How moves are ordered
+		1. PV move
+		2. Captures in MVV/LVA
+		3. 1st killer move
+		4. 2nd killer move
+		5. History moves
+		6. Unsorted moves
+	*/
+
 	inline int Search::scoreMove(int move, Position& pos) {
+		if (scorePV) {
+			if (pvTable[0][ply] == move) {
+				scorePV = 0;
+
+				// give PV move the highest score
+				return 20000;
+			}
+		}
+
 		if (getMoveCapture(move)) {
 			int targetPiece = Piece::P;
 
@@ -147,7 +182,7 @@ namespace Sloth {
 	}
 
 	inline int Search::negamax(int alpha, int beta, int depth, Position& pos) {
-		
+
 		pvLength[ply] = ply; // inits the PV length
 
 		// recursion escape condition
@@ -165,12 +200,34 @@ namespace Sloth {
 		
 		int legalMoves = 0;
 
+		// null move pruning
+		if (depth >= 3 && kingCheck == 0 && ply) {
+			copyBoard(pos);
+
+			pos.sideToMove ^= 1; // switching the side gives the opponent an extra move to make
+
+			pos.enPassant = no_sq;
+
+			int score = -negamax(-beta, -beta + 1, depth - 1 - 2, pos); // search with reduced depth to find beta cutoffs (2 is the reduction limit)
+		
+			takeBack(pos);
+
+			// fail hard beta cutoff
+			if (score >= beta) return beta;
+		}
+
 		// At this point we are creating many movelists (Around the whole chess engine), so for later, consider generating every legal after a move has been played, so that we dont have to generate over and over again, in the same position
 		Movegen::MoveList moveList[1];
 		
 		Movegen::generateMoves(pos, moveList);
 
+		if (followPV) {
+			enablePVScoring(moveList);
+		}
+
 		sortMoves(moveList, pos); // sort the moves to speed stuff up (doing the same in quiescence search)
+
+		int movesSearched = 0;
 
 		for (int c = 0; c < moveList->count; c++) {
 			copyBoard(pos);
@@ -185,11 +242,33 @@ namespace Sloth {
 
 			legalMoves++;
 
-			int score = -negamax(-beta, -alpha, depth - 1, pos);
+			int score = 0;
+
+			if (movesSearched == 0) {
+				score = -negamax(-beta, -alpha, depth - 1, pos); // doing the normal AB search
+			}
+			else { // late move reduction
+				if (movesSearched >= fullDepthMoves && depth >= reductionLimit && kingCheck == 0 && !getMoveCapture(moveList->moves[c]) && !getMovePromotion(moveList->moves[c])) // not having getMoveCapture and promotion was faster
+					score = -negamax(-alpha - 1, -alpha, depth - 2, pos);
+				else
+					score = alpha + 1;
+
+				// principle variation search
+				if (score > alpha) {
+					score = -negamax(-alpha - 1, -alpha, depth - 1, pos); // better move has been found during LMR, re-search at full depth but with narrowed score bandwith
+						
+					// if fails to prove that other moves are bad
+					if ((score > alpha) && (score < beta)) { // if LMR fails, re-search at full depth and full score bandwith
+						score = -negamax(-beta, -alpha, depth - 1, pos);
+					}
+				}
+			}
 
 			ply--;
 
 			takeBack(pos);
+
+			movesSearched++;
 
 			// using fail-hard beta cutoff
 			if (score >= beta) {
@@ -232,20 +311,35 @@ namespace Sloth {
 	}
 	
 	void Search::search(Position& pos, int depth) {
-		// find the best move (32001 infinite value in stockfish)
-		//int score = negamax(-50000, 50000, depth, pos);
 
 		// clear out garbage
 		nodes = 0;
+
+		followPV = 0;
+		scorePV = 0;
 
 		memset(killerMoves, 0, sizeof(killerMoves));
 		memset(historyMoves, 0, sizeof(historyMoves));
 		memset(pvTable, 0, sizeof(pvTable));
 		memset(pvLength, 0, sizeof(pvLength)); // is this really needed?
 
+		int alpha = -50000;
+		int beta = 50000;
+
 		// iterative deepening
 		for (int curDepth = 1; curDepth <= depth; curDepth++) {
-			int score = negamax(-50000, 50000, curDepth, pos);
+			followPV = 1;
+
+			int score = negamax(alpha, beta, curDepth, pos);
+
+			if ((score <= alpha) || (score >= beta)) {
+				alpha = -50000;
+				beta = 50000;
+				continue;
+			}
+
+			alpha = score - 50;
+			beta = score + 50;
 
 			printf("info score cp %d depth %d nodes %ld pv ", score, curDepth, nodes);
 
@@ -261,10 +355,5 @@ namespace Sloth {
 		printf("bestmove ");
 		Movegen::printMove(pvTable[0][0]); // first element within PV table
 		printf("\n");
-
-		//printf("\nmove val: %d, old best:\n", bestMove);
-		//Movegen::printMove(oldBest);
-		//printf("\n");
-
 	}
 }

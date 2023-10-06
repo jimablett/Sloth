@@ -60,7 +60,7 @@ int main(int argc, char* argv[])
         pos.parseFen(trickyPosition);
         pos.printBoard();
 
-        Search::search(pos, 6);
+        Search::search(pos, 7);
 
         //Movegen::generateMoves(pos, movelist);
 
