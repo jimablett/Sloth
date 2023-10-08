@@ -177,7 +177,7 @@ namespace Sloth {
 						// generate the quiet pawn moves
 						if (!(target > h1) && !getBit(Bitboards::occupancies[both], target)) {
 							// pawn promotion
-							if (sourceSquare >= a2 && sourceSquare <= h2) { // BE AWARE: a7 and h7 is not the same as it is in tutorial (8 and 15 replaces)
+							if (sourceSquare >= a2 && sourceSquare <= h2) {
 								addMove(moveList, encodeMove(sourceSquare, target, piece, Piece::q, 0, 0, 0, 0));
 								addMove(moveList, encodeMove(sourceSquare, target, piece, Piece::r, 0, 0, 0, 0));
 								addMove(moveList, encodeMove(sourceSquare, target, piece, Piece::b, 0, 0, 0, 0));

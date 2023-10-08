@@ -49,6 +49,8 @@ int main(int argc, char* argv[])
 
     Magic::initAttacks();
     Bitboards::initLeaperAttacks();
+    Zobrist::initRandomKeys();
+    Search::clearHashTable();
 
     int debug = 0;
 
@@ -57,10 +59,10 @@ int main(int argc, char* argv[])
 
         Movegen::MoveList movelist[1];
 
-        pos.parseFen(trickyPosition);
+        pos.parseFen(startPosition);
         pos.printBoard();
 
-        Search::search(pos, 7);
+        Search::search(pos, 10);
 
         //Movegen::generateMoves(pos, movelist);
 

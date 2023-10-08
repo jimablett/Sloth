@@ -143,30 +143,10 @@ namespace Sloth {
 
 	inline int Bitboards::getLs1bIndex(U64 bitboard) {
 		if (bitboard) {
-			// -v can be faked with ~v + 1
-
 			return countBits((bitboard & (0 - bitboard)) - 1);
-
-			//return countBits((U64)(bitboard & (~bitboard + 1)) - 1);
-			//return countBits((bitboard & -bitboard) - 1);
-
-			// works?
-			//U64 negatedBitboard = ~bitboard + 1;
-
-			//return countBits(negatedBitboard - 1);
-
-
-			//return countBits(bitboard - 1);
-
-
-			//uint64_t signedBitboard = static_cast<uint64_t>(bitboard);
-			//return countBits((signedBitboard & -signedBitboard) - 1);
-			//return countBits((bitboard & -bitboard) - 1);
 		}
 		else {
 			return -1;
 		}
-	}
-
-		
+	}	
 }

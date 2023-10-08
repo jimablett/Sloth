@@ -9,6 +9,57 @@
 #include "types.h"
 
 namespace Sloth {
+	
+	U64 Zobrist::pieceKeys[12][4];
+	U64 Zobrist::enPassantKeys[64];
+	U64 Zobrist::castlingKeys[16];
+	U64 Zobrist::sideKey;
+
+	void Zobrist::initRandomKeys() {
+
+		for (int piece = Piece::P; piece <= Piece::k; piece++) {
+			for (int sq = 0; sq < 64; sq++) {
+				Zobrist::pieceKeys[piece][sq] = Magic::getRandomU64Num(); // can this be predefined?
+			}
+		}
+
+		for (int sq = 0; sq < 64; sq++) {
+			Zobrist::enPassantKeys[sq] = Magic::getRandomU64Num();
+		}
+
+		for (int i = 0; i < 16; i++) {
+			Zobrist::castlingKeys[i] = Magic::getRandomU64Num();
+		}
+
+		Zobrist::sideKey = Magic::getRandomU64Num();
+	}
+
+	U64 Zobrist::generateHashKey(Position& pos) { // generate unique hash key
+		U64 finalKey = 0ULL;
+		U64 bb;
+
+		for (int piece = Piece::P; piece <= Piece::k; piece++) {
+			bb = Bitboards::bitboards[piece];
+
+			while (bb) {
+				int sq = Bitboards::getLs1bIndex(bb);
+
+				finalKey ^= pieceKeys[piece][sq];
+
+				popBit(bb, sq);
+			}
+		}
+
+		if (pos.enPassant != no_sq) {
+			finalKey ^= enPassantKeys[pos.enPassant];
+		}
+
+		finalKey ^= castlingKeys[pos.castle];
+
+		if (pos.sideToMove == Colors::black) finalKey ^= sideKey;
+
+		return finalKey;
+	}
 
 	int Position::makeMove(Position& pos, int move, int moveFlag) {
 		// quiet
@@ -27,6 +78,10 @@ namespace Sloth {
 			popBit(Bitboards::bitboards[piece], sourceSquare); // pop bit from sourcesquare
 			setBit(Bitboards::bitboards[piece], targetSquare); // set bit on targetsquare
 
+			// hash the piece (move the piece in hash)
+			hashKey ^= Zobrist::pieceKeys[piece][sourceSquare];
+			hashKey ^= Zobrist::pieceKeys[piece][targetSquare];
+
 			if (captureFlag) { // if move is capturing something
 				int startPiece, endPiece;
 
@@ -38,6 +93,9 @@ namespace Sloth {
 					if (getBit(Bitboards::bitboards[bbPiece], targetSquare)) { // if piece on target square, then remove from corresponding bitboard
 						popBit(Bitboards::bitboards[bbPiece], targetSquare);
 
+						// remove the piece from hash
+						hashKey ^= Zobrist::pieceKeys[bbPiece][targetSquare];
+
 						break;
 					}
 				}
@@ -47,18 +105,45 @@ namespace Sloth {
 			if (promotedPiece) {
 				popBit(Bitboards::bitboards[(pos.sideToMove == Colors::white) ? Piece::P : Piece::p], targetSquare);// remove pawn from target square
 
+				hashKey ^= Zobrist::pieceKeys[(pos.sideToMove == Colors::white) ? Piece::P : Piece::p][targetSquare]; // remove from hash key
+
 				setBit(Bitboards::bitboards[promotedPiece], targetSquare); // set up the promoted piece
+
+				hashKey ^= Zobrist::pieceKeys[promotedPiece][targetSquare]; // adding promoted to hash key
 			}
 
 			if (enPassantFlag) {
-				(pos.sideToMove == Colors::white) ? popBit(Bitboards::bitboards[Piece::p], targetSquare + 8) : popBit(Bitboards::bitboards[Piece::P], targetSquare - 8);
+
+				if (pos.sideToMove == Colors::white) {
+					popBit(Bitboards::bitboards[Piece::p], targetSquare + 8);
+
+					hashKey ^= Zobrist::pieceKeys[Piece::p][targetSquare + 8]; // remove from hash key
+				}
+				else {
+					popBit(Bitboards::bitboards[Piece::P], targetSquare - 8);
+
+					hashKey ^= Zobrist::pieceKeys[Piece::P][targetSquare - 8];
+				}
 			}
+
+			// hash enpassant (remove enpassant square from hash key)
+			if (pos.enPassant != no_sq) hashKey ^= Zobrist::enPassantKeys[pos.enPassant];
 
 			// reset enpassant square regardless of what is moved
 			pos.enPassant = no_sq;
 
 			if (doubleFlag) { // take a look at this is perft test fails
-				(pos.sideToMove == Colors::white) ? (pos.enPassant = targetSquare + 8) : (pos.enPassant = targetSquare - 8);
+
+				if (pos.sideToMove == Colors::white) {
+					pos.enPassant = targetSquare + 8;
+
+					hashKey ^= Zobrist::enPassantKeys[targetSquare + 8];
+				}
+				else {
+					pos.enPassant = targetSquare - 8;
+
+					hashKey ^= Zobrist::enPassantKeys[targetSquare - 8];
+				}
 			}
 
 			if (castlingFlag) {
@@ -67,27 +152,44 @@ namespace Sloth {
 				case (g1): // king side
 					popBit(Bitboards::bitboards[Piece::R], h1); // remove rook from h1
 					setBit(Bitboards::bitboards[Piece::R], f1); // set it to f1
+
+					hashKey ^= Zobrist::pieceKeys[Piece::R][h1]; // hashing the rook
+					hashKey ^= Zobrist::pieceKeys[Piece::R][f1];
 					break;
 				case (c1):
 					popBit(Bitboards::bitboards[Piece::R], a1);
 					setBit(Bitboards::bitboards[Piece::R], d1);
+
+					hashKey ^= Zobrist::pieceKeys[Piece::R][a1];
+					hashKey ^= Zobrist::pieceKeys[Piece::R][d1];
 					break;
 				case (g8): // black
 					popBit(Bitboards::bitboards[Piece::r], h8);
 					setBit(Bitboards::bitboards[Piece::r], f8);
+
+					hashKey ^= Zobrist::pieceKeys[Piece::r][h8];
+					hashKey ^= Zobrist::pieceKeys[Piece::r][f8];
 					break;
 				case (c8):
 					popBit(Bitboards::bitboards[Piece::r], a8);
 					setBit(Bitboards::bitboards[Piece::r], d8);
+
+					hashKey ^= Zobrist::pieceKeys[Piece::r][a8];
+					hashKey ^= Zobrist::pieceKeys[Piece::r][d8];
 					break;
 				default:
 					break;
 				}
 			}
 
+			// hash castling
+			hashKey ^= Zobrist::castlingKeys[pos.castle];
+
 			// update castling rights (white a1 rook might be messing it up???)
 			pos.castle &= CASTLING_RIGHTS_CONSTANTS[sourceSquare];
 			pos.castle &= CASTLING_RIGHTS_CONSTANTS[targetSquare];
+
+			hashKey ^= Zobrist::castlingKeys[pos.castle];
 
 			// update occupancies
 			memset(Bitboards::occupancies, 0ULL, 24);
@@ -105,6 +207,8 @@ namespace Sloth {
 			Bitboards::occupancies[Colors::both] |= Bitboards::occupancies[Colors::black];
 
 			pos.sideToMove ^= 1;
+
+			hashKey ^= Zobrist::sideKey;
 
 			// make sure that king hasnt been exposed into a check
 			// THIS MIGHT TAKE UP MUCH PERFORMANCE
@@ -214,7 +318,7 @@ namespace Sloth {
 
 		Bitboards::occupancies[both] = (Bitboards::occupancies[white] | Bitboards::occupancies[black]);
 
-		//printf("Fen: \"%s\"\n", fen);
+		hashKey = Zobrist::generateHashKey(*this);
 
 		return *this;
 	}
@@ -258,12 +362,14 @@ namespace Sloth {
 				"a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
 			};
 
-			printf("     Enpassant:   %s\n", (enPassant != SQ_NONE) ? squareToCoordinates[enPassant] : "no");
+			printf("     Enpassant:   %s\n", (enPassant != no_sq) ? squareToCoordinates[enPassant] : "no");
 
 			printf("     Castling:  %c%c%c%c\n\n", (castle & WK) ? 'K' : '-',
 				(castle & WK) ? 'Q' : '-',
 				(castle & BK) ? 'k' : '-',
 				(castle & BQ) ? 'q' : '-');
+
+			printf("     Hash key: %llx\n", hashKey);
 	}
 
 	// FOR LATER: this function might be slow. Attempt to make it more efficient with less calculations if possible.

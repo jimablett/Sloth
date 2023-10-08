@@ -134,19 +134,69 @@ namespace Sloth {
 
 		char* curDepth = NULL;
 
-		if (curDepth = strstr(cmdCpy, "depth")) {
+		char* argument = NULL;
+
+		if ((argument = strstr(cmdCpy, "infinite"))) {}
+
+		if ((argument = strstr(cmdCpy, "binc")) && pos.sideToMove == Colors::black)
+			pos.time.inc = atoi(argument + 5);
+
+		if ((argument = strstr(cmdCpy, "winc")) && pos.sideToMove == Colors::white)
+			pos.time.inc = atoi(argument + 5);
+
+		if ((argument = strstr(cmdCpy, "wtime")) && pos.sideToMove == Colors::white)
+			pos.time.time = atoi(argument + 6);
+
+		if ((argument = strstr(cmdCpy, "btime")) && pos.sideToMove == Colors::black)
+			pos.time.time = atoi(argument + 6);
+
+		if (argument = strstr(cmdCpy, "movestogo"))
+			pos.time.movesToGo = atoi(argument + 10);
+
+		if (argument = strstr(cmdCpy, "movetime"))
+			pos.time.moveTime = atoi(argument + 9);
+
+		if (argument = strstr(cmdCpy, "depth"))
+			depth = atoi(argument + 6);
+
+		if (pos.time.moveTime != -1) {
+			pos.time.time = pos.time.moveTime;
+
+			pos.time.movesToGo = 1;
+		}
+
+		pos.time.startTime = pos.time.getTimeMs();
+
+		depth = depth; // ???
+
+		if (pos.time.time != -1) {
+			pos.time.timeSet = 1;
+
+			pos.time.time /= pos.time.movesToGo;
+			pos.time.time -= 50;
+			pos.time.stopTime = pos.time.startTime + pos.time.time + pos.time.inc;
+		}
+
+		if (depth == -1) { // if depth is unavailable then set to 64
+			depth = 64;
+		}
+
+		printf("time:%d start:%d stop:%d depth:%d timeset:%d\n", pos.time.time, pos.time.startTime, pos.time.stopTime, depth, pos.time.timeSet);
+
+		Search::search(pos, depth);
+
+		delete[] cmdCpy;
+		/*if (curDepth = strstr(cmdCpy, "depth")) {
 			// convert str to int and assign result val to depth
 			depth = atoi(curDepth + 6); // points to the number in go depth 7
 		}
 		else {
 			depth = 4; // diff time control placeholder
-		}
+		}*/
 
-		Search::search(pos, depth);
 
 		//printf("Depth: %d\n", depth);
 
-		delete[] cmdCpy;
 	}
 
 	void UCI::loop() {
@@ -178,6 +228,8 @@ namespace Sloth {
 			}
 			else if (strncmp(input, "ucinewgame", 10) == 0) {
 				game.parseFen(startPosition); // THIS IS TEMPORARY UNTIL PROBLEM IS FIXED
+
+				Search::clearHashTable();
 
 				parsePosition(game, "position startpos");
 			}
