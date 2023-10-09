@@ -76,14 +76,12 @@ namespace Sloth {
 		// allocate memory for copy of const char* command
 		char* cmdCpy = new char[strlen(command) + 1];
 		strcpy_s(cmdCpy, sizeof(char) * (strlen(command) + 1), command);
-		
 		//char* curChar = strstr(cmdCpy, "fen");
 		char* curChar = cmdCpy;
 
 		if (strncmp(command, "startpos", 8) == 0) { // startpos found
 			// init chess board with start pos
 			pos.parseFen(startPosition);
-
 		}
 		else {
 			// parse fen command
@@ -110,6 +108,9 @@ namespace Sloth {
 				int move = parseMove(pos, curChar);
 
 				if (move == 0) break;
+
+				Search::repetitionIndex++;
+				Search::repetitionTable[Search::repetitionIndex] = pos.hashKey;
 
 				pos.makeMove(pos, move, MoveType::allMoves);
 
@@ -225,13 +226,15 @@ namespace Sloth {
 			} 
 			else if (strncmp(input, "position", 8) == 0) {
 				parsePosition(game, input);
-			}
-			else if (strncmp(input, "ucinewgame", 10) == 0) {
-				game.parseFen(startPosition); // THIS IS TEMPORARY UNTIL PROBLEM IS FIXED
 
 				Search::clearHashTable();
+			}
+			else if (strncmp(input, "ucinewgame", 10) == 0) {
+				//game.parseFen(startPosition); // THIS IS TEMPORARY UNTIL PROBLEM IS FIXED
 
 				parsePosition(game, "position startpos");
+
+				Search::clearHashTable();
 			}
 			else if (strncmp(input, "go", 2) == 0) {
 				parseGo(game, input);

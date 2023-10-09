@@ -11,6 +11,11 @@ namespace Sloth {
 
 		extern HASHE hashTable[HASH_SIZE];
 
+		extern U64 repetitionTable[1000];
+		extern int repetitionIndex;
+		
+		extern int ply;
+
 		void clearHashTable();
 		//extern inline void writeHashEntry(int score, int depth, int hashFlag, Position& pos);
 		//extern inline int readHashEntry(int alpha, int beta, int depth, Position& pos);

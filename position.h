@@ -31,7 +31,7 @@ namespace Sloth {
 		int enPassant = no_sq; // en passant square
 		int castle;
 
-		U64 hashKey;
+		U64 hashKey = 0ULL;
 
 		int makeMove(Position& pos, int move, int moveFlag); // IF TOO SLOW THEN TRY USING STATIC INLINE, HAVE IT DEFINED IN HEADER FILE
 

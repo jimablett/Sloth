@@ -51,9 +51,12 @@ int main(int argc, char* argv[])
     Bitboards::initLeaperAttacks();
     Zobrist::initRandomKeys();
     Search::clearHashTable();
+    //game.parseFen(startPosition);
 
     int debug = 0;
 
+    // USING OK CONFIG SEEMS TO BE WORKING? (CHANGED CONFIGS, SEE DIFFERENCES)
+    //1938
     if (debug) {
         Position pos;
 

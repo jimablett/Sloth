@@ -10,6 +10,9 @@ namespace Sloth {
 
 	HASHE Search::hashTable[HASH_SIZE];
 
+	U64 Search::repetitionTable[1000];
+	int Search::repetitionIndex = 0;
+
 	const int fullDepthMoves = 4;
 	const int reductionLimit = 3;
 
@@ -19,11 +22,11 @@ namespace Sloth {
 
 	int followPV, scorePV;
 
-	int ply;
+	int Search::ply = 0;
 
 	long nodes;
 
-	int killerMoves[2][MAX_PLY]; // id, ply
+	int killerMoves[2][MAX_PLY]; // id, Search::ply
 	int historyMoves[12][64]; // piece, square
 
 	void Search::clearHashTable() { // clears the transposition (hash) table
@@ -42,18 +45,23 @@ namespace Sloth {
 		if (hashEntry->hashKey == pos.hashKey) { // make sure that we are dealing with the exact position that we need
 			if (hashEntry->depth >= depth) {
 
+				int score = hashEntry->score;
+
+				if (score < -MATE_SCORE) score += Search::ply;
+				if (score > MATE_SCORE) score -= Search::ply;
+
 				// matching PV node score
 				if (hashEntry->flag == hashfEXACT) {
-					return hashEntry->score;
+					return score;
 				}
 
 				// match alpha score
-				if ((hashEntry->flag == hashfALPHA) && (hashEntry->score <= alpha)) {
+				if ((hashEntry->flag == hashfALPHA) && (score <= alpha)) {
 					return alpha;
 				}
 
 				// match beta score
-				if ((hashEntry->flag == hashfBETA) && (hashEntry->score >= beta)) {
+				if ((hashEntry->flag == hashfBETA) && (score >= beta)) {
 					return beta;
 				}
 			}
@@ -65,6 +73,9 @@ namespace Sloth {
 	static inline void writeHashEntry(int score, int depth, int hashFlag, Position& pos) {
 		HASHE* hashEntry = &Search::hashTable[pos.hashKey % HASH_SIZE];
 
+		if (score < -MATE_SCORE) score -= Search::ply;
+		if (score > MATE_SCORE) score += Search::ply;
+
 		hashEntry->hashKey = pos.hashKey;
 		hashEntry->score = score;
 		hashEntry->flag = hashFlag;
@@ -75,7 +86,7 @@ namespace Sloth {
 		followPV = 0;
 
 		for (int i = 0; i < movelist->count; i++) {
-			if (pvTable[0][ply] == movelist->moves[i]) {
+			if (pvTable[0][Search::ply] == movelist->moves[i]) {
 				scorePV = 1;
 				followPV = 1;
 			}
@@ -106,7 +117,7 @@ namespace Sloth {
 
 	inline int Search::scoreMove(int move, Position& pos) {
 		if (scorePV) {
-			if (pvTable[0][ply] == move) {
+			if (pvTable[0][Search::ply] == move) {
 				scorePV = 0;
 
 				// give PV move the highest score
@@ -133,10 +144,10 @@ namespace Sloth {
 			return MVV_LVA[getMovePiece(move)][targetPiece] + 10000;
 		}
 		else { // scoring quiet move
-			if (killerMoves[0][ply] == move) {
+			if (killerMoves[0][Search::ply] == move) {
 				return 9000;
 			}
-			else if (killerMoves[1][ply] == move) {
+			else if (killerMoves[1][Search::ply] == move) {
 				return 8000;
 			}
 			else {
@@ -181,13 +192,24 @@ namespace Sloth {
 		return 0;
 	}
 
+	static inline int isRepetition(Position& pos) {
+		for (int i = 0; i < Search::repetitionIndex; i++) {
+			if (Search::repetitionTable[i] == pos.hashKey) {
+				// repetition found
+				return 1;
+			}
+		}
+
+		return 0; // no repetitions
+	}
+
 	static inline int quiescence(int alpha, int beta, Position& pos) {
 
 		if ((nodes & 2047) == 0) pos.time.communicate(); // listen to gui/user input every 2047 nodes
 
 		nodes++;
 
-		if (ply > MAX_PLY - 1) return Eval::evaluate(pos);
+		if (Search::ply > MAX_PLY - 1) return Eval::evaluate(pos);
 
 		int eval = Eval::evaluate(pos);
 
@@ -210,17 +232,23 @@ namespace Sloth {
 		for (int c = 0; c < moveList->count; c++) {
 			copyBoard(pos);
 
-			ply++;
+			Search::ply++;
+
+			Search::repetitionIndex++;
+			Search::repetitionTable[Search::repetitionIndex] = pos.hashKey;
 
 			if (pos.makeMove(pos, moveList->moves[c], captures) == 0) { // make sure to only make the legal moves
-				ply--;
+				Search::ply--;
+
+				Search::repetitionIndex--;
 
 				continue; // skip to next move
 			}
 
 			int score = -quiescence(-beta, -alpha, pos);
 
-			ply--;
+			Search::ply--;
+			Search::repetitionIndex--;
 
 			takeBack(pos);
 
@@ -246,38 +274,44 @@ namespace Sloth {
 
 		int hashFlag = hashfALPHA;
 
-		if (ply < 0) ply = 0; // this wasnt a part of the plan but without it ply gets set to gazillions for some reason
+		//if (Search::ply < 0) Search::ply = 0; // this wasnt a part of the plan but without it Search::ply gets set to gazillions for some reason
 
-		if (ply && (score = readHashEntry(alpha, beta, depth, pos)) != NO_HASH_ENTRY) { // if move has already been searched then return score immediately
+		bool pvNode = beta - alpha > 1;
+
+		if (Search::ply && isRepetition(pos)) return 0; // draw score, repetition has occured
+
+		if (Search::ply && (score = readHashEntry(alpha, beta, depth, pos)) != NO_HASH_ENTRY && !pvNode) { // if move has already been searched then return score immediately
 			return score;
 		}
 
-
 		if ((nodes & 2047) == 0) pos.time.communicate();
 
-		pvLength[ply] = ply; // inits the PV length
+		pvLength[Search::ply] = Search::ply; // inits the PV length
 
-		//printf("\n%d\n", ply);
+		//printf("\n%d\n", Search::ply);
 
 		// recursion escape condition
 		if (depth == 0) return quiescence(alpha, beta, pos);
 
 		// preventing overflow of arrays
-		if (ply > MAX_PLY - 1) return Eval::evaluate(pos);
+		if (Search::ply > MAX_PLY - 1) return Eval::evaluate(pos);
 
 		nodes++;
 
 		int kingCheck = pos.isSquareAttacked((pos.sideToMove == Colors::white) ? Bitboards::getLs1bIndex(Bitboards::bitboards[Piece::K]) : Bitboards::getLs1bIndex(Bitboards::bitboards[Piece::k]), pos.sideToMove ^ 1);
 
-		if (kingCheck) depth++; // If the king is in check, then we increase ply depth by one to prevent immediately getting mated
+		if (kingCheck) depth++; // If the king is in check, then we increase Search::ply depth by one to prevent immediately getting mated
 
 		int legalMoves = 0;
 
 		// null move pruning
-		if (depth >= 3 && kingCheck == 0 && ply) {
+		if (depth >= 3 && kingCheck == 0 && Search::ply) {
 			copyBoard(pos);
 
-			ply++;
+			Search::ply++;
+
+			Search::repetitionIndex++;
+			Search::repetitionTable[Search::repetitionIndex] = pos.hashKey;
 
 			if (pos.enPassant != no_sq) // hash enpassant if available
 				pos.hashKey ^= Zobrist::enPassantKeys[pos.enPassant];
@@ -290,7 +324,8 @@ namespace Sloth {
 
 			score = -negamax(-beta, -beta + 1, depth - 1 - 2, pos); // search with reduced depth to find beta cutoffs (2 is the reduction limit)
 
-			ply--;
+			Search::ply--;
+			Search::repetitionIndex--;
 
 			takeBack(pos);
 
@@ -316,10 +351,15 @@ namespace Sloth {
 		for (int c = 0; c < moveList->count; c++) {
 			copyBoard(pos);
 
-			ply++;
+			Search::ply++;
+
+			Search::repetitionIndex++;
+			Search::repetitionTable[Search::repetitionIndex] = pos.hashKey;
 
 			if (pos.makeMove(pos, moveList->moves[c], allMoves) == 0) { // make sure to only make the legal moves
-				ply--;
+				Search::ply--;
+
+				Search::repetitionIndex--;
 
 				continue; // skip to next move
 			}
@@ -330,7 +370,7 @@ namespace Sloth {
 				score = -negamax(-beta, -alpha, depth - 1, pos); // doing the normal AB search
 			}
 			else { // late move reduction
-				if (movesSearched >= fullDepthMoves && depth >= reductionLimit && kingCheck == 0 && !getMoveCapture(moveList->moves[c]) && !getMovePromotion(moveList->moves[c])) // not having getMoveCapture and promotion was faster
+				if (movesSearched >= fullDepthMoves && depth >= reductionLimit && kingCheck == 0 && getMoveCapture(moveList->moves[c]) == 0 && getMovePromotion(moveList->moves[c]) == 0) // not having getMoveCapture and promotion was faster
 					score = -negamax(-alpha - 1, -alpha, depth - 2, pos);
 				else
 					score = alpha + 1;
@@ -346,7 +386,8 @@ namespace Sloth {
 				}
 			}
 
-			ply--;
+			Search::ply--;
+			Search::repetitionIndex--;
 
 			takeBack(pos);
 
@@ -364,13 +405,13 @@ namespace Sloth {
 
 				alpha = score; //PV node
 
-				pvTable[ply][ply] = moveList->moves[c];
+				pvTable[Search::ply][Search::ply] = moveList->moves[c];
 
-				for (int next = ply + 1; next < pvLength[ply + 1]; next++) {
-					pvTable[ply][next] = pvTable[ply + 1][next];
+				for (int next = Search::ply + 1; next < pvLength[Search::ply + 1]; next++) {
+					pvTable[Search::ply][next] = pvTable[Search::ply + 1][next];
 				}
 
-				pvLength[ply] = pvLength[ply + 1];
+				pvLength[Search::ply] = pvLength[Search::ply + 1];
 
 				// using fail-hard beta cutoff
 				if (score >= beta) {
@@ -378,8 +419,8 @@ namespace Sloth {
 					writeHashEntry(beta, depth, hashfBETA, pos);
 
 					if (getMoveCapture(moveList->moves[c]) == 0) {
-						killerMoves[1][ply] = killerMoves[0][ply];
-						killerMoves[0][ply] = moveList->moves[c];
+						killerMoves[1][Search::ply] = killerMoves[0][Search::ply];
+						killerMoves[0][Search::ply] = moveList->moves[c];
 					}
 
 					return beta;
@@ -389,7 +430,7 @@ namespace Sloth {
 
 		if (legalMoves == 0) {
 			if (kingCheck) {
-				return -49000 + ply;
+				return -MATE_VALUE + Search::ply;
 			}
 			else {
 				// stalemate score
@@ -418,8 +459,8 @@ namespace Sloth {
 		memset(pvTable, 0, sizeof(pvTable));
 		memset(pvLength, 0, sizeof(pvLength)); // is this really needed?
 
-		int alpha = -50000;
-		int beta = 50000;
+		int alpha = -VALUE_INFINITE;
+		int beta = VALUE_INFINITE;
 
 		// iterative deepening
 		for (int curDepth = 1; curDepth <= depth; curDepth++) {
@@ -430,15 +471,21 @@ namespace Sloth {
 			score = negamax(alpha, beta, curDepth, pos);
 
 			if ((score <= alpha) || (score >= beta)) {
-				alpha = -50000;
-				beta = 50000;
+				alpha = -VALUE_INFINITE;
+				beta = VALUE_INFINITE;
 				continue;
 			}
 
 			alpha = score - 50;
 			beta = score + 50;
 
-			printf("info score cp %d depth %d nodes %ld time %d pv ", score, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+			if (score > -MATE_VALUE && score < -MATE_SCORE) {
+				printf("info score mate %d depth %d nodes %ld time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+			}
+			else if (score > MATE_SCORE && score < MATE_VALUE) {
+				printf("info score mate %d depth %d nodes %ld time %d pv", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+			} else
+				printf("info score cp %d depth %d nodes %ld time %d pv ", score, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
 
 			for (int c = 0; c < pvLength[0]; c++) {
 				Movegen::printMove(pvTable[0][c]);

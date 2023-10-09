@@ -6,6 +6,7 @@
 #include "magic.h"
 #include "piece.h"
 #include "movegen.h"
+#include "search.h"
 #include "types.h"
 
 namespace Sloth {
@@ -237,6 +238,14 @@ namespace Sloth {
 		sideToMove = 0;
 		enPassant = no_sq;
 		castle = 0;
+
+		hashKey = 0ULL;
+		Search::repetitionIndex = 0;
+		memset(Search::repetitionTable, 0ULL, sizeof(Search::repetitionTable));
+
+		//printf("\nply: %d\n", Search::ply);
+
+		Search::ply = 0;
 
 		for (int r = 0; r < 8; r++) {
 			for (int f = 0; f < 8; f++) {
