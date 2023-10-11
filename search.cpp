@@ -24,7 +24,7 @@ namespace Sloth {
 
 	int Search::ply = 0;
 
-	long nodes;
+	unsigned long long nodes;
 
 	int killerMoves[2][MAX_PLY]; // id, Search::ply
 	int historyMoves[12][64]; // piece, square
@@ -480,12 +480,12 @@ namespace Sloth {
 			beta = score + 50;
 
 			if (score > -MATE_VALUE && score < -MATE_SCORE) {
-				printf("info score mate %d depth %d nodes %ld time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+				printf("info score mate %d depth %d nodes %lld time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
 			}
 			else if (score > MATE_SCORE && score < MATE_VALUE) {
-				printf("info score mate %d depth %d nodes %ld time %d pv", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+				printf("info score mate %d depth %d nodes %lld time %d pv", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
 			} else
-				printf("info score cp %d depth %d nodes %ld time %d pv ", score, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+				printf("info score cp %d depth %d nodes %lld time %d pv ", score, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
 
 			for (int c = 0; c < pvLength[0]; c++) {
 				Movegen::printMove(pvTable[0][c]);

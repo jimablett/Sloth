@@ -75,7 +75,7 @@ namespace Sloth {
         }
 
         printf("\nDepth: %d\n", depth);
-        printf("Nodes: %d\n", nodes);
+        printf("Nodes: %lld\n", nodes);
         printf("Time: %ld ms\n", getTimeMs() - start);
 	}
 }

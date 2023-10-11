@@ -16,7 +16,7 @@
 
 #define MAX_PLY 64
 
-#define HASH_SIZE 0x400000 // 4 mb
+#define HASH_SIZE 800000 // changed to 20 mb
 
 #define NO_HASH_ENTRY 100000
 
@@ -109,7 +109,7 @@ const int BISHOP_SCORE[64] =
 {
      0,   0,   0,   0,   0,   0,   0,   0,
      0,   0,   0,   0,   0,   0,   0,   0,
-     0,   0,   0,  10,  10,   0,   0,   0,
+     0,  20,   0,  10,  10,   0,  20,   0,
      0,   0,  10,  20,  20,  10,   0,   0,
      0,   0,  10,  20,  20,  10,   0,   0,
      0,  10,   0,   0,   0,   0,  10,   0,

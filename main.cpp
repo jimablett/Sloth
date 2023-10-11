@@ -51,21 +51,23 @@ int main(int argc, char* argv[])
     Bitboards::initLeaperAttacks();
     Zobrist::initRandomKeys();
     Search::clearHashTable();
+    Eval::initEvalMasks();
     //game.parseFen(startPosition);
 
     int debug = 0;
 
     // USING OK CONFIG SEEMS TO BE WORKING? (CHANGED CONFIGS, SEE DIFFERENCES)
-    //1938
     if (debug) {
         Position pos;
 
         Movegen::MoveList movelist[1];
 
-        pos.parseFen(startPosition);
+        pos.parseFen("6k1/ppppprbp/8/8/8/8/PPPPPRBP/6K1 w - - ");
         pos.printBoard();
 
-        Search::search(pos, 10);
+        printf("\nScore: %d", Eval::evaluate(pos));
+
+        //Search::search(pos, 10);
 
         //Movegen::generateMoves(pos, movelist);
 

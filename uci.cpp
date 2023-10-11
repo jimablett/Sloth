@@ -174,7 +174,7 @@ namespace Sloth {
 			pos.time.timeSet = 1;
 
 			pos.time.time /= pos.time.movesToGo;
-			pos.time.time -= 50;
+			if (pos.time.time > 1500) pos.time.time -= 50;
 			pos.time.stopTime = pos.time.startTime + pos.time.time + pos.time.inc;
 		}
 
@@ -207,7 +207,7 @@ namespace Sloth {
 
 		char input[2000];
 
-		printf("id name Sloth 1.0.0\n");
+		printf("id name Sloth 1.1.0\n");
 		printf("id author William Sjolund\n");
 		printf("uciok\n");
 
@@ -243,7 +243,7 @@ namespace Sloth {
 				break;
 			}
 			else if (strncmp(input, "uci", 3) == 0) {
-				printf("id name Sloth 1.0.0\n");
+				printf("id name Sloth 1.1.0\n");
 				printf("id author William Sjolund\n");
 				printf("uciok\n");
 			}
