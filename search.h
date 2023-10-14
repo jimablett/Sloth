@@ -9,7 +9,9 @@ namespace Sloth {
 
 	namespace Search {
 
-		extern HASHE hashTable[HASH_SIZE];
+		extern int hashEntries;
+
+		extern HASHE *hashTable;
 
 		extern U64 repetitionTable[1000];
 		extern int repetitionIndex;
@@ -17,6 +19,7 @@ namespace Sloth {
 		extern int ply;
 
 		void clearHashTable();
+		void initHashTable(int mb);
 		//extern inline void writeHashEntry(int score, int depth, int hashFlag, Position& pos);
 		//extern inline int readHashEntry(int alpha, int beta, int depth, Position& pos);
 

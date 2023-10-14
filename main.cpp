@@ -50,7 +50,7 @@ int main(int argc, char* argv[])
     Magic::initAttacks();
     Bitboards::initLeaperAttacks();
     Zobrist::initRandomKeys();
-    Search::clearHashTable();
+    Search::initHashTable(64); // 64 mb default
     Eval::initEvalMasks();
     //game.parseFen(startPosition);
 
@@ -62,11 +62,13 @@ int main(int argc, char* argv[])
 
         Movegen::MoveList movelist[1];
 
-        pos.parseFen("6k1/ppppprbp/8/8/8/8/PPPPPRBP/6K1 w - - ");
+        pos.parseFen(startPosition);
         pos.printBoard();
 
-        printf("\nScore: %d", Eval::evaluate(pos));
+        printf("\nScore: %d\n", Eval::evaluate(pos));
 
+        //printf("\nScore: %d", Eval::evaluate(pos));;
+        //info score cp 4 depth 10 nodes 918169 time 8766 pv d2d4 d7d5 g1f3 g8f6 b1c3 b8c6 d1d3 c8d7 e2e4 e7e6
         //Search::search(pos, 10);
 
         //Movegen::generateMoves(pos, movelist);

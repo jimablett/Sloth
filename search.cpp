@@ -1,14 +1,65 @@
 #include "search.h"
 
 #include <iostream>
+#include <thread>
+#include <vector>
+
+#include <algorithm>
 
 #include "evaluate.h"
 #include "movegen.h"
 
-namespace Sloth {
-	//HASHE Search::hashTable[HASH_SIZE];
+#include "uci.h"
 
-	HASHE Search::hashTable[HASH_SIZE];
+namespace Sloth {
+
+	/*void aspirationWindow(Thread* thread) {
+		Search::PVariation pv;
+		int depth = thread->depth;
+		int alpha = -VALUE_INFINITE, beta = VALUE_INFINITE, delta = 10; // 10 = windowsize
+		// int report = !thread->index && thread->limits->multiPV == 1; // report if multipv 1
+
+		if (thread->depth >= 4) { // 4 = windowsize
+			//alpha = std::max(-VALUE_INFINITE, thread->pvs[thread->completed].score - delta);
+			//beta = std::min(VALUE_INFINITE, thread->pvs[thread->completed].score + delta);
+		}
+
+		while (1) {
+			pv.score = Search::search2(thread, &pv, alpha, beta, std::max(1, depth));
+			
+			// use this once thread->limits->multiPV is added and report variable is ready
+			//if ((report && pv.score > alpha && pv.score < beta)
+			//	|| (report && elapsed_time(thread->tm) >= WindowTimerMS))
+			//	uciReport(thread->threads, &pv, alpha, beta);
+
+			if (pv.score > alpha && pv.score < beta) {
+				thread->bestMoves[thread->multiPV] = pv.line[0];
+				updateBestLine(thread, &pv);
+
+				return;
+			}
+
+			if (pv.score <= alpha) {
+				beta = (alpha + beta) / 2;
+				alpha = std::max(-VALUE_INFINITE, alpha - delta);
+				depth = thread->depth;
+				revertBestLine(thread);
+			}
+			else if (pv.score >= beta) {
+				beta = std::min(VALUE_INFINITE, beta + delta);
+				depth = depth - (abs(pv.score) <= VALUE_INFINITE / 2);
+				updateBestLine(thread, &pv);
+			}
+
+			delta = delta + delta / 2;
+		}
+	}*/
+
+	int Search::hashEntries = 0;
+
+	//HASHE Search::hashTable[hashEntry];
+
+	HASHE *Search::hashTable = NULL;
 
 	U64 Search::repetitionTable[1000];
 	int Search::repetitionIndex = 0;
@@ -30,17 +81,43 @@ namespace Sloth {
 	int historyMoves[12][64]; // piece, square
 
 	void Search::clearHashTable() { // clears the transposition (hash) table
-		for (int i = 0; i < HASH_SIZE; i++) {
-			hashTable[i].hashKey = 0;
-			hashTable[i].depth = 0;
-			hashTable[i].flag = 0;
-			hashTable[i].score = 0;
+		HASHE *hashEntry;
+
+		for (hashEntry = hashTable; hashEntry < hashTable + hashEntries; hashEntry++) {
+			hashEntry->hashKey = 0;
+			hashEntry->depth = 0;
+			hashEntry->flag = 0;
+			hashEntry->score = 0;
 		}
-		//memset(hashTable, 0, HASH_SIZE * sizeof(HASHE)); // does this work??
+	}
+
+	void Search::initHashTable(int mb) {
+		int hashSize = 0x100000 * mb;
+
+		hashEntries = hashSize / sizeof(HASHE);
+
+		if (hashTable != NULL) {
+			printf("Clearing hash memory\n");
+
+			free(hashTable);
+		}
+
+		hashTable = (HASHE*)malloc(hashEntries * sizeof(HASHE));
+
+		if (hashTable == NULL) {
+			printf("Couldnt allocate memory for hash table, trying %dMB", mb / 2);
+
+			initHashTable(mb / 2);
+		}
+		else {
+			clearHashTable();
+
+			printf("Hash table is initialized with %d entries\n", hashEntries);
+		}
 	}
 
 	static inline int readHashEntry(int alpha, int beta, int depth, Position& pos) {
-		HASHE* hashEntry = &Search::hashTable[pos.hashKey % HASH_SIZE]; // pointer to hash entry
+		HASHE* hashEntry = &Search::hashTable[pos.hashKey % Search::hashEntries]; // pointer to hash entry
 
 		if (hashEntry->hashKey == pos.hashKey) { // make sure that we are dealing with the exact position that we need
 			if (hashEntry->depth >= depth) {
@@ -71,7 +148,7 @@ namespace Sloth {
 	}
 
 	static inline void writeHashEntry(int score, int depth, int hashFlag, Position& pos) {
-		HASHE* hashEntry = &Search::hashTable[pos.hashKey % HASH_SIZE];
+		HASHE* hashEntry = &Search::hashTable[pos.hashKey % Search::hashEntries];
 
 		if (score < -MATE_SCORE) score -= Search::ply;
 		if (score > MATE_SCORE) score += Search::ply;
@@ -442,7 +519,7 @@ namespace Sloth {
 
 		return alpha; // move fails low
 	}
-	
+
 	void Search::search(Position& pos, int depth) {
 		int score = 0;
 
@@ -479,20 +556,22 @@ namespace Sloth {
 			alpha = score - 50;
 			beta = score + 50;
 
-			if (score > -MATE_VALUE && score < -MATE_SCORE) {
-				printf("info score mate %d depth %d nodes %lld time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
-			}
-			else if (score > MATE_SCORE && score < MATE_VALUE) {
-				printf("info score mate %d depth %d nodes %lld time %d pv", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
-			} else
-				printf("info score cp %d depth %d nodes %lld time %d pv ", score, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+			if (pvLength[0]) {
+				if (score > -MATE_VALUE && score < -MATE_SCORE) {
+					printf("info score mate %d depth %d nodes %lld time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+				}
+				else if (score > MATE_SCORE && score < MATE_VALUE) {
+					printf("info score mate %d depth %d nodes %lld time %d pv", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+				} else
+					printf("info score cp %d depth %d nodes %lld time %d pv ", score, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
 
-			for (int c = 0; c < pvLength[0]; c++) {
-				Movegen::printMove(pvTable[0][c]);
-				printf(" ");
-			}
+				for (int c = 0; c < pvLength[0]; c++) {
+					Movegen::printMove(pvTable[0][c]);
+					printf(" ");
+				}
 
-			printf("\n");
+				printf("\n");
+			}
 		}
 
 

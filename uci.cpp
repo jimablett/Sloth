@@ -126,8 +126,22 @@ namespace Sloth {
 		// free the allocated memory
 		delete[] cmdCpy;
 	}
+	
+	void resetTimeControl(Position& pos) {
+		pos.time.quit = false;
+		pos.time.movesToGo = 30;
+		pos.time.moveTime = -1;
+		pos.time.time = -1;
+		pos.time.inc = 0;
+		pos.time.startTime = 0;
+		pos.time.stopTime = 0;
+		pos.time.timeSet = 0;
+		pos.time.stopped = 0;
+	}
 
 	void UCI::parseGo(Position& pos, const char* command) {
+		resetTimeControl(pos);
+
 		int depth = -1;
 
 		char* cmdCpy = new char[strlen(command) + 1];
@@ -207,8 +221,11 @@ namespace Sloth {
 
 		char input[2000];
 
-		printf("id name Sloth 1.1.0\n");
+		int mbHash = 0;
+
+		printf("id name Sloth %s\n", VERSION);
 		printf("id author William Sjolund\n");
+		printf("option name Hash type spin default 64 min 4 max %d\n", MAX_HASH);
 		printf("uciok\n");
 
 		while (true) {
@@ -243,11 +260,19 @@ namespace Sloth {
 				break;
 			}
 			else if (strncmp(input, "uci", 3) == 0) {
-				printf("id name Sloth 1.1.0\n");
+				printf("id name Sloth %s\n", VERSION);
 				printf("id author William Sjolund\n");
+				printf("option name Hash type spin default 64 min 4 max %d\n", MAX_HASH);
 				printf("uciok\n");
+			}
+			else if (!strncmp(input, "setoption name Hash value ", 26)) {
+				sscanf_s(input, "%*s %*s %*s %*s %d", &mbHash);
+
+				if (mbHash < 4) mbHash = 4;
+				if (mbHash > MAX_HASH) mbHash = MAX_HASH;
+
+				Search::initHashTable(mbHash);
 			}
 		}
 	}
-
 }

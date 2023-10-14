@@ -4,6 +4,7 @@
 #include "position.h"
 
 namespace Sloth {
+
 	namespace Eval {
 		extern U64 fileMasks[64];
 		extern U64 rankMasks[64];
