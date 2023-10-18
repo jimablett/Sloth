@@ -14,12 +14,27 @@ namespace Sloth {
 	U64 Eval::wPassedMasks[64];
 	U64 Eval::bPassedMasks[64];
 
-	const int doublePawnPenalty = -10;
-	const int isolatedPawnPenalty = -10;
-	const int passedPawnBonus[8] = {0, 5, 10, 20, 35, 60, 100, 200}; // each val corresponds to a rank (meaning +200 score if passed pawn is on 7)
+	const int doublePawnPenaltyOpening = -5;
+	const int doublePawnPenaltyEndgame = -10;
+
+	const int isolatedPawnPenaltyOpening = -5;
+	const int isolatedPawnPenaltyEndgame = -10;
+
+	const int passedPawnBonus[8] = {0, 10, 30, 50, 75, 100, 150, 200}; // each val corresponds to a rank (meaning +200 score if passed pawn is on 7)
 
 	const int semiFile = 10; // score for semi open file
 	const int openFile = 15; // score for open file
+
+	static const int bishopUnit = 4;
+	static const int queenUnit = 9;
+
+	static const int bishopMobilityOpening = 5;
+	static const int bishopMobilityEnd = 5;
+
+	static const int queenMobilityOpening = 1;
+	static const int queenMobilityEnd = 2;
+
+	const int kingShieldBonus = 5;
 
 	enum { PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING };
 
@@ -32,12 +47,19 @@ namespace Sloth {
 	const int openingScore = 6192;
 	const int endgameScore = 518;
 
-	const int kingShieldBonus = 5;
-
 	struct {
-		int gamePhase;
+		int gamePhase = -1;
 		int phaseScore;
 	} phase;
+
+	struct {
+		int score = 0, scoreOpening = 0, scoreEndgame = 0;
+	} scores;
+
+	struct PieceScore { // score for each piece
+		int scoreOpening = 0;
+		int scoreEndgame = 0;
+	};
 
 	U64 Eval::setFileRankMask(int fileNum, int rankNum) {
 		U64 mask = 0ULL;
@@ -105,145 +127,141 @@ namespace Sloth {
 		0, 0, 0, 0, 0, 0, 0, 0
 	};
 
-	static inline int interpolate(int pieceType, int square, bool mirror) {
-		return (POSITIONAL_SCORE[opening][pieceType][mirror ? MIRROR_SCORE[square] : square] * phase.phaseScore + (POSITIONAL_SCORE[endgame][pieceType][mirror ? MIRROR_SCORE[square] : square]) * (openingScore - phase.phaseScore)) / openingScore;
+	inline void scorePiece(PieceScore* score, int scoreOpening, int scoreEndgame) {
+		score->scoreOpening += scoreOpening;
+		score->scoreEndgame += scoreEndgame;
 	}
 
-	inline int evaluatePawns(int piece, int square) { // piece variable will switch between black and white pawns
+	inline PieceScore evaluatePawns(int piece, int square) { // piece variable will switch between black and white pawns
 		int doubled = Bitboards::countBits(Bitboards::bitboards[piece] & Eval::fileMasks[square]); // returns the amount of doubled pawns on the board for said piece side
-		int score = 0; // score for pawns
+		PieceScore score = { 0 };
 
-		U64* passedMask = (piece == Piece::P) ? Eval::wPassedMasks : Eval::bPassedMasks;
+		bool white = (piece == Piece::P);
 
-		if (phase.gamePhase == middlegame) {
-			score += interpolate(PAWN, square, (piece == Piece::P ? false : true));
-		}
-		else {
-			score += POSITIONAL_SCORE[phase.gamePhase][PAWN][(piece == Piece::P) ? square : MIRROR_SCORE[square]];
-		}
+		U64* passedMask = white ? Eval::wPassedMasks : Eval::bPassedMasks;
 
-		/*if (doubled > 1) {
-			score += doubled * doublePawnPenalty; // adds the amount of doubled pawns multiplied by the penalty for each doubled pawn (Will result in a negative number so long as doublePawnPenalty is negative)
+		score.scoreOpening += POSITIONAL_SCORE[opening][PAWN][white ? square : MIRROR_SCORE[square]];
+		score.scoreEndgame += POSITIONAL_SCORE[endgame][PAWN][white ? square : MIRROR_SCORE[square]];
+
+		if (doubled > 1) {
+			scorePiece(&score, (doubled - 1) * doublePawnPenaltyOpening, (doubled - 1) * doublePawnPenaltyEndgame); // this line adds penalty to the current piece, one for opening, and one for endgame
 		}
 
-		if ((Bitboards::bitboards[piece] & Eval::isolatedMasks[square]) == 0) { // if pawn is isolated
-			score += isolatedPawnPenalty;
+		if ((Bitboards::bitboards[piece] & Eval::isolatedMasks[square]) == 0) {
+			scorePiece(&score, isolatedPawnPenaltyOpening, isolatedPawnPenaltyEndgame);
 		}
 
-		if ((passedMask[square] & Bitboards::bitboards[piece == Piece::P ? Piece::p : Piece:: P]) == 0) { // if pawn is passed
-			score += passedPawnBonus[piece == Piece::P ? GET_RANK[square] : GET_RANK[MIRROR_SCORE[square]]];
-		}*/
+		if ((passedMask[square] & Bitboards::bitboards[white ? Piece::p : Piece::P]) == 0) {
+			scorePiece(&score, passedPawnBonus[GET_RANK[square]], passedPawnBonus[GET_RANK[square]]);
+		}
+		
+		return score;
+	}
+
+	inline PieceScore evaluateKnights(int piece, int square) {
+		PieceScore score = { 0 };
+		bool white = (piece == Piece::N);
+
+		score.scoreOpening += POSITIONAL_SCORE[opening][KNIGHT][white ? square : MIRROR_SCORE[square]];
+		score.scoreEndgame += POSITIONAL_SCORE[endgame][KNIGHT][white ? square : MIRROR_SCORE[square]];
 
 		return score;
 	}
 
-	inline int evaluateKnights(int piece, int square) {
-		int score = 0;
+	inline PieceScore evaluateRooks(int piece, int square) {
+		PieceScore score = { 0 };
+		bool white = (piece == Piece::R);
 
-		if (phase.gamePhase == middlegame) {
-			score += interpolate(KNIGHT, square, (piece == Piece::N ? false : true));
-		}
-		else {
-			score += POSITIONAL_SCORE[phase.gamePhase][KNIGHT][(piece == Piece::N) ? square : MIRROR_SCORE[square]];
-		}
-
-		return score;
-	}
-
-	inline int evaluateRooks(int piece, int square) {
-		int score = 0;
-
-		if (phase.gamePhase == middlegame) {
-			score += interpolate(ROOK, square, (piece == Piece::R ? false : true));
-		}
-		else {
-			score += POSITIONAL_SCORE[phase.gamePhase][ROOK][(piece == Piece::R) ? square : MIRROR_SCORE[square]];
-		}
+		score.scoreOpening += POSITIONAL_SCORE[opening][ROOK][white ? square : MIRROR_SCORE[square]];
+		score.scoreEndgame += POSITIONAL_SCORE[endgame][ROOK][white ? square : MIRROR_SCORE[square]];
 
 		// semi open file
-		if ((Bitboards::bitboards[piece == Piece::R ? Piece::P : Piece::p] & Eval::fileMasks[square]) == 0) {
-			score += semiFile;
+		if ((Bitboards::bitboards[white ? Piece::P : Piece::p] & Eval::fileMasks[square]) == 0) {
+			scorePiece(&score, semiFile, semiFile); // adds the bonus
 		}
 
+		// open file
 		if (((Bitboards::bitboards[Piece::P] | Bitboards::bitboards[Piece::p]) & Eval::fileMasks[square]) == 0) {
-			score += openFile;
+			scorePiece(&score, openFile, openFile);
 		}
 
 		return score;
 	}
 
-	inline int evaluateBishops(int piece, int square) {
-		int score = 0;
+	inline PieceScore getPieceMobility(bool bishop, int square) { //  MIGHT DO: on runtime start, calculate all bishop attacks for each square so that it can be fetched from bishopAttacks array
+		PieceScore score = { 0 };
 
-		if (phase.gamePhase == middlegame) {
-			score += interpolate(BISHOP, square, (piece == Piece::B ? false : true));
+		if (bishop) {
+			score.scoreOpening += (Bitboards::countBits(Magic::getBishopAttacks(square, Bitboards::occupancies[both])) - bishopUnit) * bishopMobilityOpening;
+			score.scoreEndgame += (Bitboards::countBits(Magic::getBishopAttacks(square, Bitboards::occupancies[both])) - bishopUnit) * bishopMobilityEnd;
 		}
 		else {
-			score += POSITIONAL_SCORE[phase.gamePhase][BISHOP][(piece == Piece::B) ? square : MIRROR_SCORE[square]];
+			score.scoreOpening += (Bitboards::countBits(Magic::getQueenAttacks(square, Bitboards::occupancies[both])) - queenUnit) * queenMobilityOpening;
+			score.scoreEndgame += (Bitboards::countBits(Magic::getQueenAttacks(square, Bitboards::occupancies[both])) - queenUnit) * queenMobilityEnd;
 		}
-
-		return score;
-	}
-
-	inline int evaluateQueens(int piece, int square) {
-		int score = 0;
-
-		if (phase.gamePhase == middlegame) {
-			score += interpolate(QUEEN, square, (piece == Piece::Q ? false : true));
-		}
-		else {
-			score += POSITIONAL_SCORE[phase.gamePhase][QUEEN][(piece == Piece::Q) ? square : MIRROR_SCORE[square]];
-		}
-
-		return score;
-	}
-
-	inline int evaluateKings(int piece, int square) {
-		int score = 0;
-		int kingRank = piece == Piece::K ? GET_RANK[square] : GET_RANK[MIRROR_SCORE[square]];
-
-
-		if (phase.gamePhase == middlegame) {
-			score += interpolate(KING, square, (piece == Piece::K ? false : true));
-		}
-		else {
-			score += POSITIONAL_SCORE[phase.gamePhase][KING][(piece == Piece::K) ? square : MIRROR_SCORE[square]];
-		}
-
-		//score += KING_SCORE[piece == Piece::K ? square : MIRROR_SCORE[square]];
-
-		if (phase.gamePhase != endgame) {
-			U64 kingProtectionMask = (1ULL << square - 1) | (1ULL << square + 1); // filters out squares above and under the king
-
-			if ((Bitboards::bitboards[piece == Piece::K ? Piece::P : Piece::p] & Eval::fileMasks[square]) == 0) {
-				score -= semiFile; // now a penalty
-			}
-
-			if (((Bitboards::bitboards[Piece::P] | Bitboards::bitboards[Piece::p]) & Eval::fileMasks[square]) == 0) {
-				score -= openFile;
-			}
-
-			if (kingRank == 0) { // might remove this (if so then remove protection masking too)
-				// CONSIDER EVENTUALLY: we probably dont need that much king protection in the endgame, where there are no queens. Therefore, go lighter on king safety in endgames
-				// bitwise XOR to extract squares that are above and under king in king attacks
-				score += Bitboards::countBits((Bitboards::kingAttacks[square] ^ kingProtectionMask) & Bitboards::occupancies[piece == Piece::K ? Colors::white : Colors::black]) * kingShieldBonus;
-			}
-		}
-
-		return score;
-	}
-
-	inline int getPieceMobility(bool bishop, int square) { //  MIGHT DO: on runtime start, calculate all bishop attacks for each square so that it can be fetched from bishopAttacks array
-		int score = 0;
-
-		bishop ? 
-			score += Bitboards::countBits(Magic::getBishopAttacks(square, Bitboards::occupancies[Colors::both]))
-			: score += Bitboards::countBits(Magic::getQueenAttacks(square, Bitboards::occupancies[Colors::both]));
 
 		//Bitboards::printBitboard(Magic::getBishopAttacks(square, Bitboards::occupancies[Colors::both]), false);
 
 		return score;
 	}
+
+	inline PieceScore evaluateBishops(int piece, int square) {
+		PieceScore score = { 0 };
+		PieceScore mobility = getPieceMobility(true, square);
+		bool white = (piece == Piece::B);
+
+		score.scoreOpening += POSITIONAL_SCORE[opening][BISHOP][white ? square : MIRROR_SCORE[square]];
+		score.scoreEndgame += POSITIONAL_SCORE[endgame][BISHOP][white ? square : MIRROR_SCORE[square]];
+
+		scorePiece(&score, mobility.scoreOpening, mobility.scoreEndgame);
+
+		return score;
+	}
+
+	inline PieceScore evaluateQueens(int piece, int square) {
+		PieceScore score = { 0 };
+		PieceScore mobility = getPieceMobility(false, square);
+		bool white = (piece == Piece::Q);
+
+		score.scoreOpening += POSITIONAL_SCORE[opening][QUEEN][white ? square : MIRROR_SCORE[square]];
+		score.scoreEndgame += POSITIONAL_SCORE[endgame][QUEEN][white ? square : MIRROR_SCORE[square]];
+
+		scorePiece(&score, mobility.scoreOpening, mobility.scoreEndgame);
+
+		return score;
+	}
+
+	inline PieceScore evaluateKings(int piece, int square) {
+		PieceScore score = { 0 };
+		bool white = (piece == Piece::K);
+		int kingRank = white ? GET_RANK[square] : GET_RANK[MIRROR_SCORE[square]];
+
+		//score += KING_SCORE[piece == Piece::K ? square : MIRROR_SCORE[square]];
+
+		score.scoreOpening += POSITIONAL_SCORE[opening][KING][white ? square : MIRROR_SCORE[square]];
+		score.scoreEndgame += POSITIONAL_SCORE[endgame][KING][white ? square : MIRROR_SCORE[square]];
+
+
+		if (phase.gamePhase != endgame) { // prolly dont need this, however, intention is to make the king be more careful during the active phases of the game
+			if ((Bitboards::bitboards[white ? Piece::P : Piece::p] & Eval::fileMasks[square]) == 0) { // king on semi open file
+				scorePiece(&score, -semiFile, -semiFile); // -semifile will turn it into a penalty
+			}
+
+			if (((Bitboards::bitboards[Piece::P] | Bitboards::bitboards[Piece::p]) & Eval::fileMasks[square]) == 0) {
+				scorePiece(&score, -openFile, -openFile);
+			}
+
+			if (kingRank == 0) {
+				U64 kingProtectionMask = (1ULL << square - 1) | (1ULL << square + 1);
+				int safetyScore = Bitboards::countBits((Bitboards::kingAttacks[square] ^ kingProtectionMask) & Bitboards::occupancies[white ? Colors::white : Colors::black]) * kingShieldBonus;
+
+				scorePiece(&score, safetyScore, safetyScore);
+			}
+		}
+
+		return score;
+	}
+
 
 	static inline int getGamePhaseScore() {
 		// piece scores
@@ -261,21 +279,25 @@ namespace Sloth {
 	}
 
 	inline int Eval::evaluate(Position& pos) {
+		
+		scores.score = 0;
+		scores.scoreEndgame = 0;
+		scores.scoreOpening = 0;
 
 		phase.phaseScore = getGamePhaseScore();
 
 		if (phase.phaseScore > openingScore)
 			phase.gamePhase = opening;
-		else if (phase.gamePhase < endgameScore)
+		else if (phase.phaseScore < endgameScore)
 			phase.gamePhase = endgame;
 		else
 			phase.gamePhase = middlegame;
 
-		int score = 0;
-
 		U64 bb;
 
 		int piece, square;
+
+		PieceScore P, N, B, R, Q, K, p, n, b, r, q, k;
 
 		for (int bbPiece = Piece::P; bbPiece <= Piece::k; bbPiece++) {
 			bb = Bitboards::bitboards[bbPiece];
@@ -285,82 +307,82 @@ namespace Sloth {
 
 				square = Bitboards::getLs1bIndex(bb);
 
-				// score material weights with pure phase scores
-				
-				if (phase.gamePhase == middlegame) {
-					/*
-						Formula used for calculating interpolated score for a given game phase:
-						(openingScore * phaseScore + endgameScore * (openingPhaseScore - gamePhaseScore)) / openingPhaseScore
+				scores.scoreOpening += materialScore[opening][piece];
+				scores.scoreEndgame += materialScore[endgame][piece];
 
-						EXAMPLE: score for pawn on d4 at phase 5000 would be:
-						interpolatedScore = (12 * 5000 + (-7) * (6192 - 5000)) / 6192 = 8.34237726098
-					*/
-					score += (materialScore[opening][piece] * phase.phaseScore + materialScore[endgame][piece] * (openingScore - phase.phaseScore)) / openingScore;
-				}
-				else {
-					score += materialScore[phase.gamePhase][piece];
-				}
-
-				// SEE https://www.chessprogramming.org/Evaluation, MIGHT MODIFY THIS TO MAKE IT MORE ACCURATE
-				// score material weights
-				//score += materialScore[piece];
-				// 
-				// TODO: create functions like evaluatepawns
-				// score position piece scores
 				switch (piece)
 				{
 				case Piece::P:
-					score += evaluatePawns(Piece::P, square);
+					P = evaluatePawns(Piece::P, square);
+					scores.scoreOpening += P.scoreOpening;
+					scores.scoreEndgame += P.scoreEndgame;
 
 					break;
 				case Piece::N:
-					score += evaluateKnights(Piece::N, square);
+					N = evaluateKnights(Piece::N, square);
+					scores.scoreOpening += N.scoreOpening;
+					scores.scoreEndgame += N.scoreEndgame;
 
 					break;
 				case Piece::B:
-					score += evaluateBishops(Piece::B, square);
-					
-					score += getPieceMobility(true, square);
+					B = evaluateBishops(Piece::B, square);
+					scores.scoreOpening += B.scoreOpening;
+					scores.scoreEndgame += B.scoreEndgame;
 
 					break;
 				case Piece::R:
-					score += evaluateRooks(Piece::R, square);
+					R = evaluateRooks(Piece::R, square);
+					scores.scoreOpening += R.scoreOpening;
+					scores.scoreEndgame += R.scoreEndgame;
 
 					break;
 				case Piece::Q:
-					score += evaluateQueens(Piece::Q, square);
-					//score += getPieceMobility(false, square);
+					Q = evaluateQueens(Piece::Q, square);
+					scores.scoreOpening += Q.scoreOpening;
+					scores.scoreEndgame += Q.scoreEndgame;
 
 					break;
 				case Piece::K:
-					score += evaluateKings(Piece::K, square);
+					K = evaluateKings(Piece::K, square);
+					scores.scoreOpening += K.scoreOpening;
+					scores.scoreEndgame += K.scoreEndgame;
 
 					break;
 
 				case Piece::p:
-					score -= evaluatePawns(Piece::p, square);
+					p = evaluatePawns(Piece::p, square);
+					scores.scoreOpening -= p.scoreOpening;
+					scores.scoreEndgame -= p.scoreEndgame;
 
 					break;
 				case Piece::n:
-					score -= evaluateKnights(Piece::n, square);
+					n = evaluateKnights(Piece::n, square);
+					scores.scoreOpening -= n.scoreOpening;
+					scores.scoreEndgame -= n.scoreEndgame;
 
 					break;
 				case Piece::b:
-					score -= evaluateBishops(Piece::b, square);
-					score -= getPieceMobility(true, square);
+					b = evaluateBishops(Piece::b, square);
+					//scores.scoreOpening -= b.scoreOpening;
+					//scores.scoreEndgame -= b.scoreEndgame;
 					
 					break;
 				case Piece::r:
-					score -= evaluateRooks(Piece::r, square);
+					r = evaluateRooks(Piece::r, square);
+					//scores.scoreOpening -= r.scoreOpening;
+					//scores.scoreEndgame -= r.scoreEndgame;
 
 					break;
 				case Piece::q:
-					score -= evaluateQueens(Piece::q, square);
-					//score -= getPieceMobility(false, square);
+					q = evaluateQueens(Piece::q, square);
+					//scores.scoreOpening -= q.scoreOpening;
+					//scores.scoreEndgame -= q.scoreEndgame;
 
 					break;
 				case Piece::k:
-					score -= evaluateKings(Piece::k, square);
+					k = evaluateKings(Piece::k, square);
+					//scores.scoreOpening -= k.scoreOpening;
+					//scores.scoreEndgame -= k.scoreEndgame;
 
 					break;
 				}
@@ -369,6 +391,23 @@ namespace Sloth {
 			}
 		}
 
-		return (pos.sideToMove == Colors::white) ? score : -score;
+		if (phase.gamePhase == middlegame) { // interpolating scores in the middlegame
+			/*
+				Formula used for calculating interpolated score for a given game phase:
+				(openingScore * phaseScore + endgameScore * (openingPhaseScore - gamePhaseScore)) / openingPhaseScore
+
+				EXAMPLE: score for pawn on d4 at phase 5000 would be:
+				interpolatedScore = (12 * 5000 + (-7) * (6192 - 5000)) / 6192 = 8.34237726098
+			*/
+			scores.score = (scores.scoreOpening * phase.phaseScore + scores.scoreEndgame * (openingScore - phase.phaseScore)) / openingScore;
+		}
+		else if (phase.gamePhase == opening) {
+			scores.score = scores.scoreOpening; // pure opening score in opening
+		}
+		else {
+			scores.score = scores.scoreEndgame;
+		}
+
+		return (pos.sideToMove == Colors::white) ? scores.score : -scores.score;
 	}
 }

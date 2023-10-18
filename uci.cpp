@@ -29,7 +29,7 @@ namespace Sloth {
 		// MIGHT BE A FASTER AND BETTER WAY OF DOING THIS (like without generating moves all over again)
 		Movegen::MoveList moveList[1];
 
-		Movegen::generateMoves(pos, moveList);
+		Movegen::generateMoves(pos, moveList, false);
 
 		int sourceSquare = (moveString[0] - 'a') + (8 - (moveString[1] - '0')) * 8;
 		int targetSquare = (moveString[2] - 'a') + (8 - (moveString[3] - '0')) * 8;
@@ -190,6 +190,8 @@ namespace Sloth {
 			pos.time.time /= pos.time.movesToGo;
 			if (pos.time.time > 1500) pos.time.time -= 50;
 			pos.time.stopTime = pos.time.startTime + pos.time.time + pos.time.inc;
+
+			if (pos.time.time < 1500 && pos.time.inc && depth == 64) pos.time.stopTime = pos.time.startTime + pos.time.inc - 50;
 		}
 
 		if (depth == -1) { // if depth is unavailable then set to 64

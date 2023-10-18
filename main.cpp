@@ -63,13 +63,13 @@ int main(int argc, char* argv[])
         Movegen::MoveList movelist[1];
 
         pos.parseFen(startPosition);
+        //pos.parseFen("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
         pos.printBoard();
 
         printf("\nScore: %d\n", Eval::evaluate(pos));
 
-        //printf("\nScore: %d", Eval::evaluate(pos));;
-        //info score cp 4 depth 10 nodes 918169 time 8766 pv d2d4 d7d5 g1f3 g8f6 b1c3 b8c6 d1d3 c8d7 e2e4 e7e6
-        //Search::search(pos, 10);
+
+        Search::search(pos, 10);
 
         //Movegen::generateMoves(pos, movelist);
 
@@ -120,6 +120,8 @@ int main(int argc, char* argv[])
         //Search::search(pos, 6);
         
     } else UCI::loop();
+
+    free(Search::hashTable);
 
     //pos.LoadPosition(fen);
     // "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R w KQkq - 0 1"

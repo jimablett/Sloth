@@ -20,7 +20,7 @@ namespace Sloth {
 
 		for (int piece = Piece::P; piece <= Piece::k; piece++) {
 			for (int sq = 0; sq < 64; sq++) {
-				Zobrist::pieceKeys[piece][sq] = Magic::getRandomU64Num(); // can this be predefined?
+				Zobrist::pieceKeys[piece][sq] = Magic::getRandomU64Num();
 			}
 		}
 

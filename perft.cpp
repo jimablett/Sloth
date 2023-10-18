@@ -17,7 +17,7 @@ namespace Sloth {
 
 		Movegen::MoveList moveList[1];
 
-		Movegen::generateMoves(pos, moveList);
+		Movegen::generateMoves(pos, moveList, false);
 
         for (int c = 0; c < moveList->count; c++) {
 
@@ -50,7 +50,7 @@ namespace Sloth {
 
         Movegen::MoveList moveList[1];
 
-        Movegen::generateMoves(pos, moveList);
+        Movegen::generateMoves(pos, moveList, false);
 
         long start = getTimeMs();
 

@@ -235,11 +235,6 @@ namespace Sloth {
 		return 0;
 	}
 
-
-	/*
-	* COMMENT: try this
-	just a side note, at least in my engine, I have found it is more efficient to do a similar selection sort, but instead of sorting the list all at once, we select the best move, play it, and then repeat. It's better to do it this way because we don't spend time sorting moves the engine decides to prune anyway.
-	*/
 	inline int Search::sortMoves(Movegen::MoveList* moveList, Position& pos) {
 		int* moveScores = new int[moveList->count];
 
@@ -247,8 +242,23 @@ namespace Sloth {
 			moveScores[i] = scoreMove(moveList->moves[i], pos);
 		}
 
+		for (int i = 1; i < moveList->count; i++) { // faster solution
+			int currentMove = moveList->moves[i];
+			int currentScore = moveScores[i];
+			int j = i - 1;
+
+			while (j >= 0 && moveScores[j] < currentScore) {
+				moveList->moves[j + 1] = moveList->moves[j];
+				moveScores[j + 1] = moveScores[j];
+				j--;
+			}
+
+			moveList->moves[j + 1] = currentMove;
+			moveScores[j + 1] = currentScore;
+		}
+
 		// might be a faster way to do this??
-		for (int cur = 0; cur < moveList->count; cur++) {
+		/*for (int cur = 0; cur < moveList->count; cur++) {
 			for (int next = cur + 1; next < moveList->count; next++) { // loops over the next move
 				if (moveScores[cur] < moveScores[next]) { //if score of cur move is worse than the score of the next move then swap the scores
 					int tmpScore = moveScores[cur];
@@ -262,7 +272,7 @@ namespace Sloth {
 					moveList->moves[next] = tmpMove;
 				}
 			}
-		}
+		}*/
 
 		delete[] moveScores; // free the memory
 
@@ -302,7 +312,7 @@ namespace Sloth {
 
 		Movegen::MoveList moveList[1];
 
-		Movegen::generateMoves(pos, moveList);
+		Movegen::generateMoves(pos, moveList, true);
 
 		Search::sortMoves(moveList, pos);
 
@@ -347,6 +357,9 @@ namespace Sloth {
 	}
 
 	inline int Search::negamax(int alpha, int beta, int depth, Position& pos) {
+
+		pvLength[Search::ply] = Search::ply; // inits the PV length
+
 		int score = 0;
 
 		int hashFlag = hashfALPHA;
@@ -362,10 +375,6 @@ namespace Sloth {
 		}
 
 		if ((nodes & 2047) == 0) pos.time.communicate();
-
-		pvLength[Search::ply] = Search::ply; // inits the PV length
-
-		//printf("\n%d\n", Search::ply);
 
 		// recursion escape condition
 		if (depth == 0) return quiescence(alpha, beta, pos);
@@ -415,7 +424,7 @@ namespace Sloth {
 		// At this point we are creating many movelists (Around the whole chess engine), so for later, consider generating every legal after a move has been played, so that we dont have to generate over and over again, in the same position
 		Movegen::MoveList moveList[1];
 
-		Movegen::generateMoves(pos, moveList);
+		Movegen::generateMoves(pos, moveList, false);
 
 		if (followPV) {
 			enablePVScoring(moveList);

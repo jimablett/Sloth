@@ -61,7 +61,8 @@ namespace Sloth {
         extern inline void printMove(int move);
         extern inline void printMoveList(MoveList* moveList);
 
-		extern inline void generateMoves(Position &pos, MoveList* moveCount);
+		//extern inline void generateMoves(Position &pos, MoveList* moveCount);
+        extern inline void generateMoves(Position &pos, MoveList* moveCount, bool captures);
 	}
 }
 
