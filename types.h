@@ -5,7 +5,7 @@
 #include "bitboards.h"
 #pragma warning(disable: 4554)
 
-#define VERSION "1.2.0"
+#define VERSION "1.3.0"
 
 #define emptyBoard "8/8/8/8/8/8/8/8 b - - "
 #define startPosition "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
