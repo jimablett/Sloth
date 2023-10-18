@@ -363,26 +363,26 @@ namespace Sloth {
 					break;
 				case Piece::b:
 					b = evaluateBishops(Piece::b, square);
-					//scores.scoreOpening -= b.scoreOpening;
-					//scores.scoreEndgame -= b.scoreEndgame;
+					scores.scoreOpening -= b.scoreOpening;
+					scores.scoreEndgame -= b.scoreEndgame;
 					
 					break;
 				case Piece::r:
 					r = evaluateRooks(Piece::r, square);
-					//scores.scoreOpening -= r.scoreOpening;
-					//scores.scoreEndgame -= r.scoreEndgame;
+					scores.scoreOpening -= r.scoreOpening;
+					scores.scoreEndgame -= r.scoreEndgame;
 
 					break;
 				case Piece::q:
 					q = evaluateQueens(Piece::q, square);
-					//scores.scoreOpening -= q.scoreOpening;
-					//scores.scoreEndgame -= q.scoreEndgame;
+					scores.scoreOpening -= q.scoreOpening;
+					scores.scoreEndgame -= q.scoreEndgame;
 
 					break;
 				case Piece::k:
 					k = evaluateKings(Piece::k, square);
-					//scores.scoreOpening -= k.scoreOpening;
-					//scores.scoreEndgame -= k.scoreEndgame;
+					scores.scoreOpening -= k.scoreOpening;
+					scores.scoreEndgame -= k.scoreEndgame;
 
 					break;
 				}
