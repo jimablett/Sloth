@@ -116,7 +116,7 @@ namespace Sloth {
 		}
 	}
 
-	static inline int readHashEntry(int alpha, int beta, int depth, Position& pos) {
+	static inline int readHashEntry(int alpha, int beta, int *bestMove, int depth, Position& pos) {
 		HASHE* hashEntry = &Search::hashTable[pos.hashKey % Search::hashEntries]; // pointer to hash entry
 
 		if (hashEntry->hashKey == pos.hashKey) { // make sure that we are dealing with the exact position that we need
@@ -142,12 +142,14 @@ namespace Sloth {
 					return beta;
 				}
 			}
+
+			*bestMove = hashEntry->bestMove;
 		}
 
 		return NO_HASH_ENTRY; // hash entry doesnt exist
 	}
 
-	static inline void writeHashEntry(int score, int depth, int hashFlag, Position& pos) {
+	static inline void writeHashEntry(int score, int bestMove, int depth, int hashFlag, Position& pos) {
 		HASHE* hashEntry = &Search::hashTable[pos.hashKey % Search::hashEntries];
 
 		if (score < -MATE_SCORE) score -= Search::ply;
@@ -157,6 +159,7 @@ namespace Sloth {
 		hashEntry->score = score;
 		hashEntry->flag = hashFlag;
 		hashEntry->depth = depth;
+		hashEntry->bestMove = bestMove;
 	}
 
 	static inline void enablePVScoring(Movegen::MoveList* movelist) {
@@ -235,11 +238,18 @@ namespace Sloth {
 		return 0;
 	}
 
-	inline int Search::sortMoves(Movegen::MoveList* moveList, Position& pos) {
+	inline int Search::sortMoves(Movegen::MoveList* moveList, int bestMove, Position& pos) {
 		int* moveScores = new int[moveList->count];
 
 		for (int i = 0; i < moveList->count; i++) {
-			moveScores[i] = scoreMove(moveList->moves[i], pos);
+			if (bestMove == moveList->moves[i]) {
+				moveScores[i] = 30000;
+			}
+			else {
+				moveScores[i] = scoreMove(moveList->moves[i], pos);
+			}
+
+			//moveScores[i] = scoreMove(moveList->moves[i], pos);
 		}
 
 		for (int i = 1; i < moveList->count; i++) { // faster solution
@@ -314,7 +324,7 @@ namespace Sloth {
 
 		Movegen::generateMoves(pos, moveList, true);
 
-		Search::sortMoves(moveList, pos);
+		Search::sortMoves(moveList, 0, pos);
 
 		for (int c = 0; c < moveList->count; c++) {
 			copyBoard(pos);
@@ -361,16 +371,15 @@ namespace Sloth {
 		pvLength[Search::ply] = Search::ply; // inits the PV length
 
 		int score = 0;
+		int bestMove = 0;
 
 		int hashFlag = hashfALPHA;
-
-		//if (Search::ply < 0) Search::ply = 0; // this wasnt a part of the plan but without it Search::ply gets set to gazillions for some reason
 
 		bool pvNode = beta - alpha > 1;
 
 		if (Search::ply && isRepetition(pos)) return 0; // draw score, repetition has occured
 
-		if (Search::ply && (score = readHashEntry(alpha, beta, depth, pos)) != NO_HASH_ENTRY && !pvNode) { // if move has already been searched then return score immediately
+		if (Search::ply && (score = readHashEntry(alpha, beta, &bestMove, depth, pos)) != NO_HASH_ENTRY && !pvNode) { // if move has already been searched then return score immediately
 			return score;
 		}
 
@@ -389,6 +398,16 @@ namespace Sloth {
 		if (kingCheck) depth++; // If the king is in check, then we increase Search::ply depth by one to prevent immediately getting mated
 
 		int legalMoves = 0;
+
+		int staticEval = Eval::evaluate(pos);
+
+		if (depth < 3 && !pvNode && !kingCheck && abs(beta - 1) > -VALUE_INFINITE + 100) {
+			int evalMargin = 120 * depth;
+
+			if (staticEval - evalMargin >= beta) {
+				return staticEval - evalMargin;
+			}
+		}
 
 		// null move pruning
 		if (depth >= 3 && kingCheck == 0 && Search::ply) {
@@ -421,6 +440,30 @@ namespace Sloth {
 			if (score >= beta) return beta;
 		}
 
+		if (!pvNode && !kingCheck && depth <= 3) {
+			score = staticEval + 125;
+
+			int newScore;
+
+			if (score < beta) {
+				if (depth == 1) {
+					newScore = quiescence(alpha, beta, pos);
+
+					return (newScore > score) ? newScore : score;
+				}
+
+				score += 175;
+
+				if (score < beta && depth <= 2) {
+					newScore = quiescence(alpha, beta, pos);
+
+					if (newScore < beta) {
+						return (newScore > score) ? newScore : score;
+					}
+				}
+			}
+		}
+
 		// At this point we are creating many movelists (Around the whole chess engine), so for later, consider generating every legal after a move has been played, so that we dont have to generate over and over again, in the same position
 		Movegen::MoveList moveList[1];
 
@@ -430,7 +473,7 @@ namespace Sloth {
 			enablePVScoring(moveList);
 		}
 
-		sortMoves(moveList, pos); // sort the moves to speed stuff up (doing the same in quiescence search)
+		sortMoves(moveList, bestMove, pos); // sort the moves to speed stuff up (doing the same in quiescence search)
 
 		int movesSearched = 0;
 
@@ -486,6 +529,8 @@ namespace Sloth {
 				// switch hash flag
 				hashFlag = hashfEXACT;
 
+				bestMove = moveList->moves[c];
+
 				if (getMoveCapture(moveList->moves[c]) == 0) // this CAN be removed
 					historyMoves[getMovePiece(moveList->moves[c])][getMoveTarget(moveList->moves[c])] += depth;
 
@@ -502,7 +547,7 @@ namespace Sloth {
 				// using fail-hard beta cutoff
 				if (score >= beta) {
 					// store hash entry
-					writeHashEntry(beta, depth, hashfBETA, pos);
+					writeHashEntry(beta, bestMove, depth, hashfBETA, pos);
 
 					if (getMoveCapture(moveList->moves[c]) == 0) {
 						killerMoves[1][Search::ply] = killerMoves[0][Search::ply];
@@ -524,7 +569,7 @@ namespace Sloth {
 			}
 		}
 
-		writeHashEntry(alpha, depth, hashFlag, pos);
+		writeHashEntry(alpha, bestMove, depth, hashFlag, pos);
 
 		return alpha; // move fails low
 	}
@@ -581,6 +626,7 @@ namespace Sloth {
 
 				printf("\n");
 			}
+
 		}
 
 

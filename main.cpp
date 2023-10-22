@@ -16,7 +16,6 @@
 #include "movegen.h"
 #include "types.h"
 
-
 // testing
 #include "position.h"
 #include "perft.h"
@@ -62,12 +61,21 @@ int main(int argc, char* argv[])
 
         Movegen::MoveList movelist[1];
 
-        pos.parseFen(startPosition);
+        // killer position without probcut: 
+
+        pos.parseFen(killerPosition);
         //pos.parseFen("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
         pos.printBoard();
 
-        printf("\nScore: %d\n", Eval::evaluate(pos));
+        //printf("\nScore: %d\n", Eval::evaluate(pos));
 
+        // before _mm_popcnt_u64: info score cp 13 depth 10 nodes 566696 time 1125 pv d2d4 d7d5 c1f4 g8f6 e2e3 b8c6 f1d3 c6b4 b1d2 b4d3
+        // after _mm_popcnt_u64: info score cp 13 depth 10 nodes 566696 time 656 pv d2d4 d7d5 c1f4 g8f6 e2e3 b8c6 f1d3 c6b4 b1d2 b4d3
+
+
+        //info score cp 13 depth 10 nodes 566696 time 703 pv d2d4 d7d5 c1f4 g8f6 e2e3 b8c6 f1d3 c6b4 b1d2 b4d3
+
+        // info score cp 0 depth 12 nodes 8241990 time 8640 pv d2d4 d7d5 c1f4 c8f5 e2e3 e7e6 b1c3 g8f6 g1f3 f6g4
 
         Search::search(pos, 10);
 

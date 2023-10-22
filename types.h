@@ -33,6 +33,7 @@ typedef struct { // transposition table
     int depth;
     int flag; // flag the type of node (fail-high / fail-low / pv)
     int score; // (alpha, beta, pv)
+    int bestMove;
 } HASHE;
 
 enum {

@@ -26,9 +26,11 @@ namespace Sloth {
 		void printMoveScores(Movegen::MoveList* moveList, Position& pos);
 
 		extern inline int scoreMove(int move, Position& pos);
-		extern inline int sortMoves(Movegen::MoveList* moveList, Position& pos);
+		extern inline int sortMoves(Movegen::MoveList* moveList, int bestMove, Position& pos);
 		
 		extern inline int negamax(int alpha, int beta, int depth, Position& pos);
+
+		extern inline int aspirationSearch(int alpha, int beta, int depth, Position& pos);
 
 		void search(Position& pos, int depth);
 	}

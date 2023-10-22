@@ -1,6 +1,8 @@
 #include <iostream>
 #include <vector>
 #include <cstdint>
+#include <immintrin.h>
+#include <intrin.h>
 
 #include "bitboards.h"
 #include "types.h"
@@ -126,10 +128,12 @@ namespace Sloth {
 
 			Bitboards::kingAttacks[square] = maskKingAttacks(square);
 		}
+
 	}
 
 	inline int Bitboards::countBits(U64 bb) {
-		int c = 0;
+		return _mm_popcnt_u64(bb);
+		/*int c = 0;
 
 		while (bb) {
 			c++;
@@ -138,12 +142,17 @@ namespace Sloth {
 			bb &= bb - 1;
 		}
 
-		return c;
+		return c;*/
 	}
 
 	inline int Bitboards::getLs1bIndex(U64 bitboard) {
 		if (bitboard) {
-			return countBits((bitboard & (0 - bitboard)) - 1);
+			unsigned long index;
+
+			_BitScanForward64(&index, bitboard);
+
+			return index;
+			//return countBits((bitboard & (0 - bitboard)) - 1);
 		}
 		else {
 			return -1;
