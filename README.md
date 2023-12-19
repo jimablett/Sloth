@@ -1,3 +1,6 @@
+![_f558e1c0-3a09-4c3c-aca2-7f556df01d27](https://github.com/Williamguttn/Sloth/assets/69588728/c6ff4527-da60-43b6-8835-7650e972bd78)
+[Generated with DALL E 3]
+
 # Overview
 Sloth is a decent UCI chess engine made with C++, although significant parts of its source code are written in a C stylish code.
 
