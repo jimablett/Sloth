@@ -6,11 +6,13 @@
 #include "magic.h"
 #include "piece.h"
 #include "movegen.h"
+#include "evaluate.h"
 #include "search.h"
 #include "types.h"
 
+using namespace Sloth::Bitboards;
+
 namespace Sloth {
-	
 	U64 Zobrist::pieceKeys[12][4];
 	U64 Zobrist::enPassantKeys[64];
 	U64 Zobrist::castlingKeys[16];
@@ -83,11 +85,19 @@ namespace Sloth {
 			hashKey ^= Zobrist::pieceKeys[piece][sourceSquare];
 			hashKey ^= Zobrist::pieceKeys[piece][targetSquare];
 
+			pos.fifty++;
+
+			if (piece == Piece::P || piece == Piece::p) {
+				pos.fifty = 0;
+			}
+
 			if (captureFlag) { // if move is capturing something
 				int startPiece, endPiece;
 
 				startPiece = (pos.sideToMove == Colors::white) ? Piece::p : Piece::P;
 				endPiece = (pos.sideToMove == Colors::white) ? Piece::k : Piece::K;
+				
+				pos.fifty = 0;
 
 				// loop over bb opposite to current side to move
 				for (int bbPiece = startPiece; bbPiece <= endPiece; bbPiece++) {
@@ -393,9 +403,6 @@ namespace Sloth {
 		if (Bitboards::knightAttacks[square] & ((side == Colors::white) ? Bitboards::bitboards[Piece::N] : Bitboards::bitboards[Piece::n]))
 			return 1;
 
-		// KEEP IN MIND: THIS ONE WAS OBSERVED TO NOT WORK PROPERLY ON ATTACKS. PRINT ATTACKED SQUARES WITH BISHOP ON BOARD TO TEST
-		//if (Magic::getBishopAttacks(square, Bitboards::occupancies[Colors::both]) & ((!side) ? Bitboards::bitboards[Piece::B] : Bitboards::bitboards[Piece::b]))
-			//return 1;
 		if (Magic::getBishopAttacks(square, Bitboards::occupancies[Colors::both]) & ((side == Colors::white) ? Bitboards::bitboards[Piece::B] : Bitboards::bitboards[Piece::b])) return 1;
 
 		if (Magic::getRookAttacks(square, Bitboards::occupancies[Colors::both]) & ((side == Colors::white) ? Bitboards::bitboards[Piece::R] : Bitboards::bitboards[Piece::r]))
@@ -408,6 +415,66 @@ namespace Sloth {
 			return 1;
 
 		return 0;
+	}
+
+	U64 Position::attackersTo(int sq, U64 occ) { // for rook attacks and bishop attacks i might be able to use the arrays
+		return (bitboards[Piece::P] & pawnAttacks[black][sq]) |
+				(bitboards[Piece::p] & pawnAttacks[white][sq]) |
+			(knightAttacks[sq] & (bitboards[Piece::N] | bitboards[Piece::n])) |
+			(kingAttacks[sq] & (bitboards[Piece::K] | bitboards[Piece::k])) |
+			(Magic::getRookAttacks(sq, occ) & (bitboards[Piece::R] | bitboards[Piece::r] | bitboards[Piece::Q] | bitboards[Piece::q])) |
+			(Magic::getBishopAttacks(sq, occ) & (bitboards[Piece::B] | bitboards[Piece::b] | bitboards[Piece::Q] | bitboards[Piece::q]));
+	}
+
+	U64 Position::attackedBy(int color) { // squares attacked by pieces of color
+		U64 result = 0;
+		U64 kingSquare = bitboards[color == Colors::white ? Piece::K : Piece::k];
+		U64 occ = occupancies[both] ^ kingSquare;
+
+		// Calculate king attacks
+		result |= kingAttacks[getLs1bIndex(kingSquare)];
+
+		// Calculate knight attacks
+		U64 knights = bitboards[color == Colors::white ? Piece::N : Piece::n];
+		while (knights) {
+			int index = getLs1bIndex(knights);
+			result |= knightAttacks[index];
+			knights &= knights - 1;
+		}
+
+		// Calculate pawn attacks
+		U64 pawns = bitboards[color == Colors::white ? Piece::P : Piece::p];
+		while (pawns) {
+			int index = getLs1bIndex(pawns);
+			result |= pawnAttacks[color][index]; // Ensure you're using the correct color.
+			pawns &= pawns - 1;
+		}
+
+		// Calculate rook attacks
+		U64 rooks = bitboards[color == Colors::white ? Piece::R : Piece::r];
+		while (rooks) {
+			int index = getLs1bIndex(rooks);
+			result |= Magic::getRookAttacks(index, occ);
+			rooks &= rooks - 1;
+		}
+
+		// Calculate bishop attacks
+		U64 bishops = bitboards[color == Colors::white ? Piece::B : Piece::b];
+		while (bishops) {
+			int index = getLs1bIndex(bishops);
+			result |= Magic::getBishopAttacks(index, occ);
+			bishops &= bishops - 1;
+		}
+
+		// Calculate queen attacks
+		U64 queens = bitboards[color == Colors::white ? Piece::Q : Piece::q];
+		while (queens) {
+			int index = getLs1bIndex(queens);
+			result |= Magic::getQueenAttacks(index, occ);
+			queens &= queens - 1;
+		}
+
+		return result;
 	}
 
 	void Position::printAttackedSquares(int side) {

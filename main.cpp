@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 #include <string.h>
 
@@ -24,7 +25,6 @@
 #include "evaluate.h"
 
 using namespace Sloth;
-using namespace std;
 
 int main(int argc, char* argv[])
 {
@@ -61,23 +61,38 @@ int main(int argc, char* argv[])
 
         Movegen::MoveList movelist[1];
 
+
         // killer position without probcut: 
 
-        pos.parseFen(killerPosition);
-        //pos.parseFen("rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
+        pos.parseFen(startPosition);
+        //pos.parseFen("8/8/8/8/3N1N2/8/2N1N3/8 w - - 0 1");
+
         pos.printBoard();
 
-        //printf("\nScore: %d\n", Eval::evaluate(pos));
+        Bitboards::printBitboard(Bitboards::bitboards[Piece::P], false);
+        
+        //Bitboards::printBitboard(~(~Bitboards::notABFile | ~Bitboards::notHGFile), false);
+       // Bitboards::printBitboard(0x0505050505050505ULL, false);
+        //Movegen::generateMoves(pos, movelist, false);
+ 
+        /*Threads::Thread* thread = Threads::createThreadPool(2); // 2 threads
+        UCI::UCIGoStruct uciGoStruct{thread, pos};
+        UCI::Limits *limits = &uciGoStruct.limits;
 
-        // before _mm_popcnt_u64: info score cp 13 depth 10 nodes 566696 time 1125 pv d2d4 d7d5 c1f4 g8f6 e2e3 b8c6 f1d3 c6b4 b1d2 b4d3
-        // after _mm_popcnt_u64: info score cp 13 depth 10 nodes 566696 time 656 pv d2d4 d7d5 c1f4 g8f6 e2e3 b8c6 f1d3 c6b4 b1d2 b4d3
+        memset(limits, 0, sizeof(UCI::Limits));
 
+        // check limits right here if not working correctly
+        limits->multiPV = movelist->count;
 
-        //info score cp 13 depth 10 nodes 566696 time 703 pv d2d4 d7d5 c1f4 g8f6 e2e3 b8c6 f1d3 c6b4 b1d2 b4d3
+        Search2::startSearchThreads(&uciGoStruct); // starts the search*/
 
-        // info score cp 0 depth 12 nodes 8241990 time 8640 pv d2d4 d7d5 c1f4 c8f5 e2e3 e7e6 b1c3 g8f6 g1f3 f6g4
+        // info score cp 0 depth 12 nodes 6111926 time 6047 pv b1c3 g8f6 d2d4 d7d5 c1f4 e7e6 g1f3 f6g4
+        // reverse futility pruning: info score cp 0 depth 12 nodes 5033723 time 5500 pv b1c3 g8f6 e2e3 b8c6 d2d4 d7d5 g1f3 f6g4
 
-        Search::search(pos, 10);
+        // two dimensional PV table: info score cp 0 depth 12 nodes 5033723 time 4454 pv b1c3 g8f6 e2e3 b8c6 d2d4 d7d5 g1f3 f6g4
+        // one dimensional PV table: info score cp 0 depth 12 nodes 3558957 time 2875 pv d2d4 g8f6 d2d4 b8c6 c1b2 b8c6 a3b4 c8e6
+
+        //Bitboards::printBitboard(Bitboards::pawnAdvance(Bitboards::bitboards[Piece::p]));
 
         //Movegen::generateMoves(pos, movelist);
 
@@ -130,6 +145,8 @@ int main(int argc, char* argv[])
     } else UCI::loop();
 
     free(Search::hashTable);
+    //free(Search2::hashTable);
+
 
     //pos.LoadPosition(fen);
     // "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R w KQkq - 0 1"

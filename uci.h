@@ -2,7 +2,9 @@
 #define UCI_H_INCLUDED
 
 #include "position.h"
-#include "search.h"
+//#include "threads.h"
+#include "types.h"
+//#include "search2.h"
 
 namespace Sloth {
 	namespace UCI {

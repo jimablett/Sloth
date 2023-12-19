@@ -13,53 +13,11 @@
 
 namespace Sloth {
 
-	/*void aspirationWindow(Thread* thread) {
-		Search::PVariation pv;
-		int depth = thread->depth;
-		int alpha = -VALUE_INFINITE, beta = VALUE_INFINITE, delta = 10; // 10 = windowsize
-		// int report = !thread->index && thread->limits->multiPV == 1; // report if multipv 1
-
-		if (thread->depth >= 4) { // 4 = windowsize
-			//alpha = std::max(-VALUE_INFINITE, thread->pvs[thread->completed].score - delta);
-			//beta = std::min(VALUE_INFINITE, thread->pvs[thread->completed].score + delta);
-		}
-
-		while (1) {
-			pv.score = Search::search2(thread, &pv, alpha, beta, std::max(1, depth));
-			
-			// use this once thread->limits->multiPV is added and report variable is ready
-			//if ((report && pv.score > alpha && pv.score < beta)
-			//	|| (report && elapsed_time(thread->tm) >= WindowTimerMS))
-			//	uciReport(thread->threads, &pv, alpha, beta);
-
-			if (pv.score > alpha && pv.score < beta) {
-				thread->bestMoves[thread->multiPV] = pv.line[0];
-				updateBestLine(thread, &pv);
-
-				return;
-			}
-
-			if (pv.score <= alpha) {
-				beta = (alpha + beta) / 2;
-				alpha = std::max(-VALUE_INFINITE, alpha - delta);
-				depth = thread->depth;
-				revertBestLine(thread);
-			}
-			else if (pv.score >= beta) {
-				beta = std::min(VALUE_INFINITE, beta + delta);
-				depth = depth - (abs(pv.score) <= VALUE_INFINITE / 2);
-				updateBestLine(thread, &pv);
-			}
-
-			delta = delta + delta / 2;
-		}
-	}*/
-
 	int Search::hashEntries = 0;
 
 	//HASHE Search::hashTable[hashEntry];
 
-	HASHE *Search::hashTable = NULL;
+	HASHE* Search::hashTable = NULL;
 
 	U64 Search::repetitionTable[1000];
 	int Search::repetitionIndex = 0;
@@ -81,7 +39,7 @@ namespace Sloth {
 	int historyMoves[12][64]; // piece, square
 
 	void Search::clearHashTable() { // clears the transposition (hash) table
-		HASHE *hashEntry;
+		HASHE* hashEntry;
 
 		for (hashEntry = hashTable; hashEntry < hashTable + hashEntries; hashEntry++) {
 			hashEntry->hashKey = 0;
@@ -97,7 +55,7 @@ namespace Sloth {
 		hashEntries = hashSize / sizeof(HASHE);
 
 		if (hashTable != NULL) {
-			printf("Clearing hash memory\n");
+			printf("info string Clearing hash memory\n");
 
 			free(hashTable);
 		}
@@ -105,18 +63,18 @@ namespace Sloth {
 		hashTable = (HASHE*)malloc(hashEntries * sizeof(HASHE));
 
 		if (hashTable == NULL) {
-			printf("Couldnt allocate memory for hash table, trying %dMB", mb / 2);
+			printf("info string Couldnt allocate memory for hash table, trying %dMB", mb / 2);
 
 			initHashTable(mb / 2);
 		}
 		else {
 			clearHashTable();
 
-			printf("Hash table is initialized with %d entries\n", hashEntries);
+			printf("info string Hash table is initialized with %d entries\n", hashEntries);
 		}
 	}
 
-	static inline int readHashEntry(int alpha, int beta, int *bestMove, int depth, Position& pos) {
+	static inline int readHashEntry(int alpha, int beta, int* bestMove, int depth, Position& pos) {
 		HASHE* hashEntry = &Search::hashTable[pos.hashKey % Search::hashEntries]; // pointer to hash entry
 
 		if (hashEntry->hashKey == pos.hashKey) { // make sure that we are dealing with the exact position that we need
@@ -360,7 +318,6 @@ namespace Sloth {
 					return beta;
 				}
 			}
-
 		}
 
 		return alpha;
@@ -409,6 +366,16 @@ namespace Sloth {
 			}
 		}
 
+		//if (!pvNode && depth < 7 && staticEval >= beta + 150 * depth) {
+		//if (!pvNode && depth < 7 && staticEval >= beta + 150 * depth) {
+		//	return staticEval;
+		//}
+
+		// this is better?
+		if (staticEval - 80 * depth >= beta && !kingCheck && depth < 9 && !pvNode) {
+			return staticEval - 80 * depth;
+		}
+
 		// null move pruning
 		if (depth >= 3 && kingCheck == 0 && Search::ply) {
 			copyBoard(pos);
@@ -443,9 +410,9 @@ namespace Sloth {
 		if (!pvNode && !kingCheck && depth <= 3) {
 			score = staticEval + 125;
 
-			int newScore;
-
 			if (score < beta) {
+				int newScore;
+
 				if (depth == 1) {
 					newScore = quiescence(alpha, beta, pos);
 
@@ -499,7 +466,9 @@ namespace Sloth {
 				score = -negamax(-beta, -alpha, depth - 1, pos); // doing the normal AB search
 			}
 			else { // late move reduction
+
 				if (movesSearched >= fullDepthMoves && depth >= reductionLimit && kingCheck == 0 && getMoveCapture(moveList->moves[c]) == 0 && getMovePromotion(moveList->moves[c]) == 0) // not having getMoveCapture and promotion was faster
+					
 					score = -negamax(-alpha - 1, -alpha, depth - 2, pos);
 				else
 					score = alpha + 1;
@@ -519,6 +488,11 @@ namespace Sloth {
 			Search::repetitionIndex--;
 
 			takeBack(pos);
+
+			// deep futility pruning (only wins by 1, look at it later)
+			//if (score + (25 - depth * depth) <= alpha && !pvNode && !kingCheck) {
+			//	return score;
+			//}
 
 			if (pos.time.stopped == true) return 0;
 
@@ -544,6 +518,8 @@ namespace Sloth {
 
 				pvLength[Search::ply] = pvLength[Search::ply + 1];
 
+				//report(score, depth, pos);
+
 				// using fail-hard beta cutoff
 				if (score >= beta) {
 					// store hash entry
@@ -553,6 +529,8 @@ namespace Sloth {
 						killerMoves[1][Search::ply] = killerMoves[0][Search::ply];
 						killerMoves[0][Search::ply] = moveList->moves[c];
 					}
+
+					//report(score, depth, pos);
 
 					return beta;
 				}
@@ -572,6 +550,34 @@ namespace Sloth {
 		writeHashEntry(alpha, bestMove, depth, hashFlag, pos);
 
 		return alpha; // move fails low
+	}
+
+	static int aspirate(int depth, int score, Position& pos) {
+		if (depth == 1) {
+			return Search::negamax(-VALUE_INFINITE, VALUE_INFINITE, depth, pos);
+		}
+
+		// delta 1: 100
+
+		int delta = 100;
+		int alpha = std::max(score - delta, -VALUE_INFINITE);
+		int beta = std::min(score + delta, VALUE_INFINITE);
+
+		for (;; delta += delta / 2) {
+			score = Search::negamax(alpha, beta, depth, pos);
+
+			if (score <= alpha) {
+				beta = (alpha + beta) / 2;
+				alpha = std::max(alpha - delta, -VALUE_INFINITE);
+			}
+			else if (score >= beta) {
+				alpha = (alpha + beta) / 2;
+				beta = std::min(beta + delta, VALUE_INFINITE);
+			}
+			else {
+				return score;
+			}
+		}
 	}
 
 	void Search::search(Position& pos, int depth) {
@@ -599,7 +605,8 @@ namespace Sloth {
 
 			followPV = 1;
 
-			score = negamax(alpha, beta, curDepth, pos);
+			//score = negamax(alpha, beta, curDepth, pos);
+			score = aspirate(curDepth, score, pos);
 
 			if ((score <= alpha) || (score >= beta)) {
 				alpha = -VALUE_INFINITE;
@@ -611,13 +618,20 @@ namespace Sloth {
 			beta = score + 50;
 
 			if (pvLength[0]) {
+				int time = pos.time.getTimeMs() - pos.time.startTime;
+
+				if (time == 0) time = 1;
+
+				U64 nps = static_cast<U64>(nodes / (static_cast<double>(time) / 1000.0));
+
 				if (score > -MATE_VALUE && score < -MATE_SCORE) {
-					printf("info score mate %d depth %d nodes %lld time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+					printf("info score mate %d depth %d nodes %lld nps %lld time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, nps, time);
 				}
 				else if (score > MATE_SCORE && score < MATE_VALUE) {
-					printf("info score mate %d depth %d nodes %lld time %d pv", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
-				} else
-					printf("info score cp %d depth %d nodes %lld time %d pv ", score, curDepth, nodes, pos.time.getTimeMs() - pos.time.startTime);
+					printf("info score mate %d depth %d nodes %lld nps %lld time %d pv", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, nps, time);
+				}
+				else
+					printf("info score cp %d depth %d nodes %lld nps %lld time %d pv ", score, curDepth, nodes, nps, time);
 
 				for (int c = 0; c < pvLength[0]; c++) {
 					Movegen::printMove(pvTable[0][c]);

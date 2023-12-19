@@ -1,7 +1,9 @@
+#define NOMINMAX
 #include <iostream>
 #include <cstring>
 #include <cstdio>
 #include <string>
+#include <algorithm>
 #include <stdlib.h>
 
 #include "uci.h"
@@ -143,6 +145,7 @@ namespace Sloth {
 		resetTimeControl(pos);
 
 		int depth = -1;
+		bool perft = false;
 
 		char* cmdCpy = new char[strlen(command) + 1];
 		strcpy_s(cmdCpy, sizeof(char) * (strlen(command) + 1), command);
@@ -174,33 +177,45 @@ namespace Sloth {
 		if (argument = strstr(cmdCpy, "depth"))
 			depth = atoi(argument + 6);
 
-		if (pos.time.moveTime != -1) {
-			pos.time.time = pos.time.moveTime;
-
-			pos.time.movesToGo = 1;
+		if (argument = strstr(cmdCpy, "perft")) {
+			depth = atoi(argument + 6);
+			perft = true;
 		}
 
-		pos.time.startTime = pos.time.getTimeMs();
 
-		depth = depth; // ???
+		if (!perft) {
+			if (pos.time.moveTime != -1) {
+				pos.time.time = pos.time.moveTime;
 
-		if (pos.time.time != -1) {
-			pos.time.timeSet = 1;
+				pos.time.movesToGo = 1;
+			}
 
-			pos.time.time /= pos.time.movesToGo;
-			if (pos.time.time > 1500) pos.time.time -= 50;
-			pos.time.stopTime = pos.time.startTime + pos.time.time + pos.time.inc;
+			pos.time.startTime = pos.time.getTimeMs();
 
-			if (pos.time.time < 1500 && pos.time.inc && depth == 64) pos.time.stopTime = pos.time.startTime + pos.time.inc - 50;
+			if (pos.time.time != -1) {
+				pos.time.timeSet = 1;
+
+				pos.time.time /= pos.time.movesToGo;
+				if (pos.time.time > 1500) pos.time.time -= 50;
+				pos.time.stopTime = pos.time.startTime + pos.time.time + pos.time.inc;
+
+				if (pos.time.time < 1500 && pos.time.inc && depth == 64) pos.time.stopTime = pos.time.startTime + pos.time.inc - 50;
+			}
+
+			if (depth == -1) { // if depth is unavailable then set to 64
+				depth = 64;
+			}
+
+			//printf("time:%d start:%d stop:%d depth:%d timeset:%d\n", pos.time.time, pos.time.startTime, pos.time.stopTime, depth, pos.time.timeSet);
+
+			Search::search(pos, depth);
 		}
+		else {
+			if (Bitboards::occupancies[Colors::both] == 0ULL)
+				parsePosition(game, "position startpos");
 
-		if (depth == -1) { // if depth is unavailable then set to 64
-			depth = 64;
+			Perft::perftTest(depth, pos);
 		}
-
-		printf("time:%d start:%d stop:%d depth:%d timeset:%d\n", pos.time.time, pos.time.startTime, pos.time.stopTime, depth, pos.time.timeSet);
-
-		Search::search(pos, depth);
 
 		delete[] cmdCpy;
 		/*if (curDepth = strstr(cmdCpy, "depth")) {
@@ -225,10 +240,7 @@ namespace Sloth {
 
 		int mbHash = 0;
 
-		printf("id name Sloth %s\n", VERSION);
-		printf("id author William Sjolund\n");
-		printf("option name Hash type spin default 64 min 4 max %d\n", MAX_HASH);
-		printf("uciok\n");
+		printf("Sloth version %s\n", VERSION);
 
 		while (true) {
 			memset(input, 0, sizeof(input));

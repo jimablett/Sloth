@@ -35,6 +35,10 @@ namespace Sloth {
 
 		void printBitboard(U64 bb, bool flip);
 
+		U64 openFileCount(U64 pawns);
+		U64 pawnAdvance(U64 pawns, U64 occ, int color);
+		U64 discoveredAttacks(int sq, int color);
+
 		U64 maskPawnAttacks(int square, int side);
 		U64 maskKnightAttacks(int square);
 		U64 maskKingAttacks(int square);

@@ -4,6 +4,8 @@
 #include <immintrin.h>
 #include <intrin.h>
 
+#include "magic.h"
+#include "piece.h"
 #include "bitboards.h"
 #include "types.h"
 
@@ -53,6 +55,32 @@ namespace Sloth {
 		printf("\n\nBitboard: %llud\n\n", bb);
 	}
 
+	U64 Bitboards::openFileCount(U64 pawns) {
+		pawns |= pawns >> 8; pawns |= pawns >> 16; pawns |= pawns >> 32;
+
+		return countBits(~pawns & 0xFF);
+	}
+
+	U64 Bitboards::pawnAdvance(U64 pawns, U64 occ, int color) {
+		return ~occ & (color == Colors::white ? (pawns >> 8) : (pawns << 8)); // check these pawn pushes
+	}
+
+	U64 Bitboards::discoveredAttacks(int sq, int color) {
+		bool white = (color == Colors::white);
+
+		U64 enemyRooks = bitboards[white ? Piece::r : Piece::R];
+		U64 enemyBishops = bitboards[white ? Piece::b : Piece::B];
+
+		U64 occ = occupancies[Colors::both];
+		U64 rAttacks = Magic::getRookAttacks(sq, occ);
+		U64 bAttacks = Magic::getBishopAttacks(sq, occ);
+
+		U64 rooks = enemyRooks & ~rAttacks;
+		U64 bishops = enemyBishops & ~bAttacks;
+
+		return (rooks & Magic::getRookAttacks(sq, occ & ~rAttacks)) | (bishops & Magic::getBishopAttacks(sq, occ & ~bAttacks));
+	}
+
 	U64 Bitboards::maskPawnAttacks(int square, int side) {
 		U64 attacks = 0ULL;
 		U64 bitboard = 0ULL; // piece bb
@@ -61,19 +89,10 @@ namespace Sloth {
 		setBit(bitboard, square);
 
 		if (!side) { // white pawns
-			/*if ((bitboard >> 7) & notAFile) attacks |= (bitboard << 7); // Should be right shift but somehow doing the opposite, therefore using left shift
-			if ((bitboard >> 9) & notHFile) attacks |= (bitboard << 9);*/
-
 			if ((bitboard >> 7) & notAFile) attacks |= (bitboard >> 7);
 			if ((bitboard >> 9) & notHFile) attacks |= (bitboard >> 9);
-
-			//if ((bitboard << 7) & notHFile) attacks |= (bitboard << 7);
-			//if ((bitboard << 9) & notAFile) attacks |= (bitboard << 9);
 		}
 		else {
-			//if ((bitboard >> 7) & notAFile) attacks |= (bitboard >> 7); // Should be left shift but somehow doing the opposite, therefore using right shift
-			//if ((bitboard >> 9) & notHFile) attacks |= (bitboard >> 9);
-
 			if ((bitboard << 7) & notHFile) attacks |= (bitboard << 7);
 			if ((bitboard << 9) & notAFile) attacks |= (bitboard << 9);
 		}
@@ -152,7 +171,7 @@ namespace Sloth {
 			_BitScanForward64(&index, bitboard);
 
 			return index;
-			//return countBits((bitboard & (0 - bitboard)) - 1);
+		//return countBits((bitboard & (0 - bitboard)) - 1);
 		}
 		else {
 			return -1;

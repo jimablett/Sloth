@@ -8,39 +8,61 @@
 #include "bitboards.h"
 #include "time.h"
 
+
 #include "types.h"
 
 
 namespace Sloth {
 	#define copyBoard(pos) \
 		U64 bbsCopy[12], occCopies[3]; \
-		int side, enPassant, castle; \
+		int side, enPassant, castle, fifty; \
+		uint16_t pieceOnSqCopy[64]; \
 		memcpy(bbsCopy, Bitboards::bitboards, 96); \
 		memcpy(occCopies, Bitboards::occupancies, 24); \
 		side = pos.sideToMove, enPassant = pos.enPassant, castle = pos.castle; \
+		fifty = pos.fifty; \
 		U64 hashKeyCopy = pos.hashKey; \
 	
 	#define takeBack(pos) \
 		memcpy(Bitboards::bitboards, bbsCopy, 96); \
 		memcpy(Bitboards::occupancies, occCopies, 24); \
 		pos.sideToMove = side; pos.enPassant = enPassant; pos.castle = castle; \
+		pos.fifty = fifty; \
 		pos.hashKey = hashKeyCopy; \
+
+#define copyBoard2(pos) \
+		U64 bbsCopy2[12], occCopies2[3]; \
+		int side2, enPassant2, castle2; \
+		uint16_t pieceOnSqCopy2[64]; \
+		memcpy(bbsCopy2, Bitboards::bitboards, 96); \
+		memcpy(occCopies2, Bitboards::occupancies, 24); \
+		side2 = pos->sideToMove, enPassant2 = pos->enPassant, castle2 = pos->castle; \
+		U64 hashKeyCopy2 = pos->hashKey; \
+
+#define takeBack2(pos) \
+		memcpy(Bitboards::bitboards, bbsCopy2, 96); \
+		memcpy(Bitboards::occupancies, occCopies2, 24); \
+		pos->sideToMove = side2; pos->enPassant = enPassant2; pos->castle = castle2; \
+		pos->hashKey = hashKeyCopy2; \
 
 	class Position {
 	public:
 		int sideToMove = -1;
 		int enPassant = no_sq; // en passant square
 		int castle;
+		int fifty = 0;
 
 		U64 hashKey = 0ULL;
 
-		int makeMove(Position& pos, int move, int moveFlag); // IF TOO SLOW THEN TRY USING STATIC INLINE, HAVE IT DEFINED IN HEADER FILE
+		int makeMove(Position& pos, int move, int moveFlag);
 
 		Position parseFen(const char *fen);
 
 		void printBoard();
 
 		inline int isSquareAttacked(int square, int side);
+		U64 attackersTo(int square, U64 occ);
+		U64 attackedBy(int color);
 
 		// temp
 		void printAttackedSquares(int side);

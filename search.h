@@ -9,6 +9,11 @@ namespace Sloth {
 
 	namespace Search {
 
+		struct PVariation {
+			int length, score;
+			int line[MAX_PLY];
+		};
+
 		extern int hashEntries;
 
 		extern HASHE *hashTable;
@@ -17,6 +22,8 @@ namespace Sloth {
 		extern int repetitionIndex;
 		
 		extern int ply;
+
+		extern int bestMove;
 
 		void clearHashTable();
 		void initHashTable(int mb);
@@ -28,9 +35,11 @@ namespace Sloth {
 		extern inline int scoreMove(int move, Position& pos);
 		extern inline int sortMoves(Movegen::MoveList* moveList, int bestMove, Position& pos);
 		
+		//extern inline int staticExchangeEvaluation(int move, Position& pos);
+
 		extern inline int negamax(int alpha, int beta, int depth, Position& pos);
 
-		extern inline int aspirationSearch(int alpha, int beta, int depth, Position& pos);
+		//extern inline int aspirationSearch(int alpha, int beta, int depth, Position& pos);
 
 		void search(Position& pos, int depth);
 	}

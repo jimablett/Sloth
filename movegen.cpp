@@ -35,7 +35,6 @@ namespace Sloth {
 	// will be used to print the move in uci
 	inline void Movegen::printMove(int move) {
 
-		// this if statement might not be needed?
 		if (getMovePromotion(move)) {
 			Piece::Pieces promotion = static_cast<Piece::Pieces>(getMovePromotion(move));
 		
