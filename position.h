@@ -30,26 +30,12 @@ namespace Sloth {
 		pos.fifty = fifty; \
 		pos.hashKey = hashKeyCopy; \
 
-#define copyBoard2(pos) \
-		U64 bbsCopy2[12], occCopies2[3]; \
-		int side2, enPassant2, castle2; \
-		uint16_t pieceOnSqCopy2[64]; \
-		memcpy(bbsCopy2, Bitboards::bitboards, 96); \
-		memcpy(occCopies2, Bitboards::occupancies, 24); \
-		side2 = pos->sideToMove, enPassant2 = pos->enPassant, castle2 = pos->castle; \
-		U64 hashKeyCopy2 = pos->hashKey; \
-
-#define takeBack2(pos) \
-		memcpy(Bitboards::bitboards, bbsCopy2, 96); \
-		memcpy(Bitboards::occupancies, occCopies2, 24); \
-		pos->sideToMove = side2; pos->enPassant = enPassant2; pos->castle = castle2; \
-		pos->hashKey = hashKeyCopy2; \
-
 	class Position {
 	public:
 		int sideToMove = -1;
 		int enPassant = no_sq; // en passant square
 		int castle;
+
 		int fifty = 0;
 
 		U64 hashKey = 0ULL;
@@ -73,7 +59,8 @@ namespace Sloth {
 	extern Position game; // this game is going to be the class for every chess game that the engine plays
 
 	namespace Zobrist {
-		extern U64 pieceKeys[12][4];
+		//extern U64 pieceKeys[12][4];
+		extern U64 pieceKeys[12][64];
 		extern U64 enPassantKeys[64];
 		extern U64 castlingKeys[16];
 		extern U64 sideKey;

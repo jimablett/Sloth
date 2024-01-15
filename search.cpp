@@ -1,17 +1,16 @@
-#include "search.h"
-
 #include <iostream>
-#include <thread>
-#include <vector>
 
 #include <algorithm>
-
+#include "search.h"
 #include "evaluate.h"
 #include "movegen.h"
+
+//#include "ttable.h"
 
 #include "uci.h"
 
 namespace Sloth {
+
 
 	int Search::hashEntries = 0;
 
@@ -38,8 +37,16 @@ namespace Sloth {
 	int killerMoves[2][MAX_PLY]; // id, Search::ply
 	int historyMoves[12][64]; // piece, square
 
+	int totalEntries = 0;
+	int usedEntries = 0;
+
 	void Search::clearHashTable() { // clears the transposition (hash) table
 		HASHE* hashEntry;
+
+		totalEntries = hashEntries;
+		usedEntries = 0;
+
+		//std::memset(Search::hashTable, 0, sizeof(Search::hashTable));
 
 		for (hashEntry = hashTable; hashEntry < hashTable + hashEntries; hashEntry++) {
 			hashEntry->hashKey = 0;
@@ -61,6 +68,9 @@ namespace Sloth {
 		}
 
 		hashTable = (HASHE*)malloc(hashEntries * sizeof(HASHE));
+
+		totalEntries = mb * 1024 * 1024 / sizeof(HASHE);
+		usedEntries = 0;
 
 		if (hashTable == NULL) {
 			printf("info string Couldnt allocate memory for hash table, trying %dMB", mb / 2);
@@ -118,6 +128,13 @@ namespace Sloth {
 		hashEntry->flag = hashFlag;
 		hashEntry->depth = depth;
 		hashEntry->bestMove = bestMove;
+		usedEntries++;
+	}
+
+	double hashFull() {
+		//return std::trunc((static_cast<double>(usedEntries) / totalEntries) * 100.0);
+
+		return 1000 * usedEntries / totalEntries;
 	}
 
 	static inline void enablePVScoring(Movegen::MoveList* movelist) {
@@ -152,7 +169,7 @@ namespace Sloth {
 		5. History moves
 		6. Unsorted moves
 	*/
-
+	
 	inline int Search::scoreMove(int move, Position& pos) {
 		if (scorePV) {
 			if (pvTable[0][Search::ply] == move) {
@@ -224,23 +241,6 @@ namespace Sloth {
 			moveList->moves[j + 1] = currentMove;
 			moveScores[j + 1] = currentScore;
 		}
-
-		// might be a faster way to do this??
-		/*for (int cur = 0; cur < moveList->count; cur++) {
-			for (int next = cur + 1; next < moveList->count; next++) { // loops over the next move
-				if (moveScores[cur] < moveScores[next]) { //if score of cur move is worse than the score of the next move then swap the scores
-					int tmpScore = moveScores[cur];
-
-					moveScores[cur] = moveScores[next];
-					moveScores[next] = tmpScore;
-
-					int tmpMove = moveList->moves[cur];
-
-					moveList->moves[cur] = moveList->moves[next];
-					moveList->moves[next] = tmpMove;
-				}
-			}
-		}*/
 
 		delete[] moveScores; // free the memory
 
@@ -366,11 +366,6 @@ namespace Sloth {
 			}
 		}
 
-		//if (!pvNode && depth < 7 && staticEval >= beta + 150 * depth) {
-		//if (!pvNode && depth < 7 && staticEval >= beta + 150 * depth) {
-		//	return staticEval;
-		//}
-
 		// this is better?
 		if (staticEval - 80 * depth >= beta && !kingCheck && depth < 9 && !pvNode) {
 			return staticEval - 80 * depth;
@@ -394,7 +389,13 @@ namespace Sloth {
 
 			pos.hashKey ^= Zobrist::sideKey;
 
+			//int R = ((823 + 67 * depth) / 256 + std::min((staticEval - beta) / 82, 3));
+
+			// test release reduction 3
 			score = -negamax(-beta, -beta + 1, depth - 1 - 2, pos); // search with reduced depth to find beta cutoffs (2 is the reduction limit)
+
+			//score = -negamax(-beta, -beta + 1, depth - 1 - std::max(0, R), pos);
+
 
 			Search::ply--;
 			Search::repetitionIndex--;
@@ -431,7 +432,6 @@ namespace Sloth {
 			}
 		}
 
-		// At this point we are creating many movelists (Around the whole chess engine), so for later, consider generating every legal after a move has been played, so that we dont have to generate over and over again, in the same position
 		Movegen::MoveList moveList[1];
 
 		Movegen::generateMoves(pos, moveList, false);
@@ -443,8 +443,37 @@ namespace Sloth {
 		sortMoves(moveList, bestMove, pos); // sort the moves to speed stuff up (doing the same in quiescence search)
 
 		int movesSearched = 0;
+		
+		//bool futileNode = depth < 15 && staticEval + 20 + 82 * depth < alpha;
 
 		for (int c = 0; c < moveList->count; c++) {
+			const int move = moveList->moves[c];
+
+			/*if (!pvNode && !kingCheck && !getMoveCapture(move) && !getMovePromotion(move)) {
+				if (depth <= 7 && legalMoves > 0 && staticEval + 80 * depth < alpha) {
+					nodes--;
+
+					continue;
+				}
+			}*/
+
+			/*
+			Score of Sloth OK config (fixes ply error) vs sloth LICHESS: 11 - 7 - 8 [0.577]
+			...      Sloth OK config (fixes ply error) playing White: 5 - 4 - 4  [0.538] 13
+			...      Sloth OK config (fixes ply error) playing Black: 6 - 3 - 4  [0.615] 13
+			...      White vs Black: 8 - 10 - 8  [0.462] 26
+			Elo difference: 53.9 +/- 116.1, LOS: 82.7 %, DrawRatio: 30.8 %
+			SPRT: llr 0 (0.0%), lbound -inf, ubound inf
+			26 of 26 games finished.
+			*/
+
+			// ~11 elo (54)
+			/*if (movesSearched > 0 && futileNode && !pvNode && !kingCheck) {
+				nodes--;
+
+				continue;
+			}*/
+
 			copyBoard(pos);
 
 			Search::ply++;
@@ -467,9 +496,14 @@ namespace Sloth {
 			}
 			else { // late move reduction
 
-				if (movesSearched >= fullDepthMoves && depth >= reductionLimit && kingCheck == 0 && getMoveCapture(moveList->moves[c]) == 0 && getMovePromotion(moveList->moves[c]) == 0) // not having getMoveCapture and promotion was faster
-					
-					score = -negamax(-alpha - 1, -alpha, depth - 2, pos);
+				if (movesSearched >= fullDepthMoves && depth >= reductionLimit && kingCheck == 0 && getMoveCapture(move) == 0 && getMovePromotion(move) == 0) {
+					// ~23 elo with reductions
+					int R = 1 + depth / 4;
+
+					if (pvNode) R--;
+
+					score = -negamax(-alpha - 1, -alpha, depth - 1 - std::max(0, R), pos);
+				}
 				else
 					score = alpha + 1;
 
@@ -503,14 +537,14 @@ namespace Sloth {
 				// switch hash flag
 				hashFlag = hashfEXACT;
 
-				bestMove = moveList->moves[c];
+				bestMove = move;
 
-				if (getMoveCapture(moveList->moves[c]) == 0) // this CAN be removed
-					historyMoves[getMovePiece(moveList->moves[c])][getMoveTarget(moveList->moves[c])] += depth;
+				if (getMoveCapture(move) == 0) // this CAN be removed
+					historyMoves[getMovePiece(move)][getMoveTarget(move)] += depth;
 
 				alpha = score; //PV node
 
-				pvTable[Search::ply][Search::ply] = moveList->moves[c];
+				pvTable[Search::ply][Search::ply] = move;
 
 				for (int next = Search::ply + 1; next < pvLength[Search::ply + 1]; next++) {
 					pvTable[Search::ply][next] = pvTable[Search::ply + 1][next];
@@ -525,9 +559,9 @@ namespace Sloth {
 					// store hash entry
 					writeHashEntry(beta, bestMove, depth, hashfBETA, pos);
 
-					if (getMoveCapture(moveList->moves[c]) == 0) {
+					if (getMoveCapture(move) == 0) {
 						killerMoves[1][Search::ply] = killerMoves[0][Search::ply];
-						killerMoves[0][Search::ply] = moveList->moves[c];
+						killerMoves[0][Search::ply] = move;
 					}
 
 					//report(score, depth, pos);
@@ -549,6 +583,8 @@ namespace Sloth {
 
 		writeHashEntry(alpha, bestMove, depth, hashFlag, pos);
 
+		//addScoreToTable(score, alpha, pos, depth, Search::ply, beta, bestMove);
+
 		return alpha; // move fails low
 	}
 
@@ -556,8 +592,6 @@ namespace Sloth {
 		if (depth == 1) {
 			return Search::negamax(-VALUE_INFINITE, VALUE_INFINITE, depth, pos);
 		}
-
-		// delta 1: 100
 
 		int delta = 100;
 		int alpha = std::max(score - delta, -VALUE_INFINITE);
@@ -596,6 +630,8 @@ namespace Sloth {
 		memset(pvTable, 0, sizeof(pvTable));
 		memset(pvLength, 0, sizeof(pvLength)); // is this really needed?
 
+		//clearHashTable();
+
 		int alpha = -VALUE_INFINITE;
 		int beta = VALUE_INFINITE;
 
@@ -605,7 +641,6 @@ namespace Sloth {
 
 			followPV = 1;
 
-			//score = negamax(alpha, beta, curDepth, pos);
 			score = aspirate(curDepth, score, pos);
 
 			if ((score <= alpha) || (score >= beta)) {
@@ -624,14 +659,17 @@ namespace Sloth {
 
 				U64 nps = static_cast<U64>(nodes / (static_cast<double>(time) / 1000.0));
 
+				int hashfull = hashFull();
+
 				if (score > -MATE_VALUE && score < -MATE_SCORE) {
-					printf("info score mate %d depth %d nodes %lld nps %lld time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, nps, time);
+					printf("info score mate %d depth %d nodes %lld nps %lld hashfull %d time %d pv ", -(score + MATE_VALUE) / 2 - 1, curDepth, nodes, nps, hashfull, time);
 				}
 				else if (score > MATE_SCORE && score < MATE_VALUE) {
-					printf("info score mate %d depth %d nodes %lld nps %lld time %d pv", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, nps, time);
+					printf("info score mate %d depth %d nodes %lld nps %lld hashfull %d time %d pv ", (MATE_VALUE - score) / 2 + 1, curDepth, nodes, nps, hashfull, time);
 				}
 				else
-					printf("info score cp %d depth %d nodes %lld nps %lld time %d pv ", score, curDepth, nodes, nps, time);
+					printf("info score cp %d depth %d nodes %lld nps %lld hashfull %d time %d pv ", score, curDepth, nodes, nps, hashfull, time);
+
 
 				for (int c = 0; c < pvLength[0]; c++) {
 					Movegen::printMove(pvTable[0][c]);
@@ -640,12 +678,11 @@ namespace Sloth {
 
 				printf("\n");
 			}
-
 		}
-
 
 		printf("bestmove ");
 		Movegen::printMove(pvTable[0][0]); // first element within PV table
+
 		printf("\n");
 	}
 }

@@ -1,3 +1,9 @@
+/*
+CHANGES (revert if stuff go badly):
+
+MADE getRank FUNCTION
+*/
+
 #include "evaluate.h"
 
 #include "bitboards.h"
@@ -14,16 +20,39 @@ namespace Sloth {
 	U64 Eval::wPassedMasks[64];
 	U64 Eval::bPassedMasks[64];
 
+	struct {
+		int gamePhase = -1;
+		int phaseScore;
+	} phase;
+
+	struct {
+		int score = 0, scoreOpening = 0, scoreEndgame = 0;
+	} scores;
+
+	struct PieceScore { // score for each piece
+		int scoreOpening = 0;
+		int scoreEndgame = 0;
+	};
+
 	const int doublePawnPenaltyOpening = -5;
 	const int doublePawnPenaltyEndgame = -10;
 
 	const int isolatedPawnPenaltyOpening = -5;
 	const int isolatedPawnPenaltyEndgame = -10;
 
-	const int passedPawnBonus[8] = {0, 10, 30, 50, 75, 100, 150, 200}; // each val corresponds to a rank (meaning +200 score if passed pawn is on 7)
+	const int passedPawnBonus[8] = { 0, 10, 30, 50, 75, 100, 150, 200 }; // each val corresponds to a rank (meaning +200 score if passed pawn is on 7)
 
 	const int semiFile = 10; // score for semi open file
 	const int openFile = 15; // score for open file
+
+	U64 forwardRanksMasks[2][8];
+
+	static const PieceScore pawnShield[] = {
+		{-19, -17},
+		{0, -12},
+		{15, -18},
+		{23, -26}
+	};
 
 	static const int bishopUnit = 4;
 	static const int queenUnit = 9;
@@ -49,20 +78,6 @@ namespace Sloth {
 
 	const int openingScore = 6192;
 	const int endgameScore = 518;
-
-	struct {
-		int gamePhase = -1;
-		int phaseScore;
-	} phase;
-
-	struct {
-		int score = 0, scoreOpening = 0, scoreEndgame = 0;
-	} scores;
-
-	struct PieceScore { // score for each piece
-		int scoreOpening = 0;
-		int scoreEndgame = 0;
-	};
 
 	U64 Eval::setFileRankMask(int fileNum, int rankNum) {
 		U64 mask = 0ULL;
@@ -143,6 +158,17 @@ namespace Sloth {
 		return Bitboards::occupancies[both] & Eval::rankMasks[square];
 	}
 
+	static inline int squareDistance(int sq1, int sq2) {
+		int rankDiff = abs((sq1 / 8) - (sq2 / 8));
+		int fileDiff = abs((sq2 % 8) - (sq2 % 8));
+
+		return std::max(rankDiff, fileDiff);
+	}
+
+	static inline int getRank(int square) {
+		return square / 8;
+	}
+
 	inline PieceScore evaluatePawns(int piece, int square) { // piece variable will switch between black and white pawns
 		int doubled = Bitboards::countBits(Bitboards::bitboards[piece] & Eval::fileMasks[square]); // returns the amount of doubled pawns on the board for said piece side
 		PieceScore score = { 0 };
@@ -163,9 +189,8 @@ namespace Sloth {
 		}
 
 		if ((passedMask[square] & Bitboards::bitboards[white ? Piece::p : Piece::P]) == 0) {
-			scorePiece(&score, passedPawnBonus[GET_RANK[square]], passedPawnBonus[GET_RANK[square]]);
+			scorePiece(&score, passedPawnBonus[getRank(square)], passedPawnBonus[getRank(square)]);
 		}
-
 
 		// NEW (TRY PAWN STRUCTURE)
 		/**int getFile = square & 7;
@@ -174,7 +199,7 @@ namespace Sloth {
 		int backwards = 0;
 
 		U64 ours = Bitboards::bitboards[piece];
-		
+
 		backwards += (getFile > 0) * (getFile < 7)
 			* ((ours & (Eval::isolatedMasks[getFile] >> ((8 - getRank) * 8))) != 0)
 				* ((ours & (Eval::isolatedMasks[getFile] << (getRank * 8))) == 0);
@@ -190,6 +215,12 @@ namespace Sloth {
 
 		score.scoreOpening += POSITIONAL_SCORE[opening][KNIGHT][white ? square : MIRROR_SCORE[square]];
 		score.scoreEndgame += POSITIONAL_SCORE[endgame][KNIGHT][white ? square : MIRROR_SCORE[square]];
+
+		//U64 enemyPawns = Bitboards::bitboards[white ? Piece::p : Piece::P];
+
+	//	if ((white ? enemyPawns << 8 : enemyPawns >> 8) & 1ULL << square) {
+	//		scorePiece(&score, 14, 20);
+	//	}
 
 		return score;
 	}
@@ -227,6 +258,9 @@ namespace Sloth {
 				scorePiece(&score, doubledRooks * Bitboards::countBits(rooksOnRank), doubledRooksEndgame * Bitboards::countBits(rooksOnRank));
 			}
 		}
+		// old: 3
+		//int mobility = Bitboards::countBits(Magic::getRookAttacks(square, Bitboards::bitboards[both]));
+		//scorePiece(&score, mobility * 3, mobility * 3);
 
 		// 5 is rook unit
 		//int mobility = (Bitboards::countBits(Magic::getRookAttacks(square, Bitboards::occupancies[both])) - 5) * 5;
@@ -282,13 +316,12 @@ namespace Sloth {
 	inline PieceScore evaluateKings(int piece, int square) {
 		PieceScore score = { 0 };
 		bool white = (piece == Piece::K);
-		int kingRank = white ? GET_RANK[square] : GET_RANK[MIRROR_SCORE[square]];
+		int kingRank = white ? getRank(square) : GET_RANK[MIRROR_SCORE[square]];
 
 		//score += KING_SCORE[piece == Piece::K ? square : MIRROR_SCORE[square]];
 
 		score.scoreOpening += POSITIONAL_SCORE[opening][KING][white ? square : MIRROR_SCORE[square]];
 		score.scoreEndgame += POSITIONAL_SCORE[endgame][KING][white ? square : MIRROR_SCORE[square]];
-
 
 		if (phase.gamePhase != endgame) { // prolly dont need this, however, intention is to make the king be more careful during the active phases of the game
 			if ((Bitboards::bitboards[white ? Piece::P : Piece::p] & Eval::fileMasks[square]) == 0) { // king on semi open file
@@ -300,11 +333,35 @@ namespace Sloth {
 			}
 
 			if (kingRank == 0) {
-				U64 kingProtectionMask = (1ULL << square - 1) | (1ULL << square + 1);
+				/*
+				New king protection
+				~21 elo
+				*/
+
+				U64 pawnSquares = white ? (square % 8 < 3 ? 0x007000000000000ULL : 0x000E0000000000000ULL) : (square % 8 < 3 ? 0x700 : 0xE000);
+				U64 pawns = Bitboards::bitboards[white ? Piece::P : Piece::p] & pawnSquares;
+				PieceScore shieldScores = pawnShield[std::min(Bitboards::countBits(pawns), 3)];
+
+				scorePiece(&score, shieldScores.scoreOpening, shieldScores.scoreEndgame);
+
+				/*U64 kingProtectionMask = (1ULL << square - 1) | (1ULL << square + 1);
 				int safetyScore = Bitboards::countBits((Bitboards::kingAttacks[square] ^ kingProtectionMask) & Bitboards::occupancies[white ? Colors::white : Colors::black]) * kingShieldBonus;
 
-				scorePiece(&score, safetyScore, safetyScore);
+				scorePiece(&score, safetyScore, safetyScore);*/
 			}
+
+/*			U64 enemyQueens = Bitboards::bitboards[white ? Piece::q : Piece::Q];
+			
+			while (enemyQueens) {
+				int sq = Bitboards::getLs1bIndex(enemyQueens);
+				int dist = squareDistance(square, sq);
+
+				if (dist < 5 && dist > 1) {
+					scorePiece(&score, sqrt((1 / dist)) * -100, sqrt((1 / dist)) * -100);
+				}
+
+				popBit(enemyQueens, sq);
+			}*/
 		}
 
 		return score;

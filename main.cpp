@@ -17,6 +17,7 @@
 #include "movegen.h"
 #include "types.h"
 
+
 // testing
 #include "position.h"
 #include "perft.h"
@@ -49,7 +50,8 @@ int main(int argc, char* argv[])
     Magic::initAttacks();
     Bitboards::initLeaperAttacks();
     Zobrist::initRandomKeys();
-    Search::initHashTable(64); // 64 mb default
+    Search::initHashTable(64);
+    //TranspositionTable::initTT();
     Eval::initEvalMasks();
     //game.parseFen(startPosition);
 
@@ -64,15 +66,14 @@ int main(int argc, char* argv[])
 
         // killer position without probcut: 
 
-        pos.parseFen(startPosition);
-        //pos.parseFen("8/8/8/8/3N1N2/8/2N1N3/8 w - - 0 1");
+       // pos.parseFen(startPosition);
 
         pos.printBoard();
-
-        Bitboards::printBitboard(Bitboards::bitboards[Piece::P], false);
         
         //Bitboards::printBitboard(~(~Bitboards::notABFile | ~Bitboards::notHGFile), false);
-       // Bitboards::printBitboard(0x0505050505050505ULL, false);
+        //Bitboards::printBitboard((Bitboards::bitboards[Piece::P] << 8) & 1ULL << a1, false);
+
+        // white: >> black: <<
         //Movegen::generateMoves(pos, movelist, false);
  
         /*Threads::Thread* thread = Threads::createThreadPool(2); // 2 threads

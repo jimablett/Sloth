@@ -5,7 +5,7 @@
 #include "bitboards.h"
 #pragma warning(disable: 4554)
 
-#define VERSION "1.5"
+#define VERSION "1.6"
 
 #define emptyBoard "8/8/8/8/8/8/8/8 b - - "
 #define startPosition "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -19,6 +19,7 @@
 
 #define NO_HASH_ENTRY 100000
 //#define MAX_HASH 256 // max hash 128 mb
+#define MIN_HASH 16
 #define MAX_HASH 1028
 
 #define hashfEXACT 0

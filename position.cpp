@@ -13,12 +13,38 @@
 using namespace Sloth::Bitboards;
 
 namespace Sloth {
-	U64 Zobrist::pieceKeys[12][4];
+	//U64 Zobrist::pieceKeys[12][4];
+
+	/*
+			Score of Sloth OK config (fixes ply error) vs sloth LICHESS: 21 - 5 - 0 [0.808]
+		...      Sloth OK config (fixes ply error) playing White: 12 - 1 - 0  [0.923] 13
+		...      Sloth OK config (fixes ply error) playing Black: 9 - 4 - 0  [0.692] 13
+		...      White vs Black: 16 - 10 - 0  [0.615] 26
+		Elo difference: 249.3 +/- 217.5, LOS: 99.9 %, DrawRatio: 0.0 %
+		SPRT: llr 0 (0.0%), lbound -inf, ubound inf
+		26 of 26 games finished.
+
+		Player: Sloth OK config (fixes ply error)
+		   "Loss: Black mates": 1
+		   "Loss: White mates": 4
+		   "Win: Black mates": 9
+		   "Win: White mates": 12
+		Player: sloth LICHESS
+		   "Loss: Black mates": 9
+		   "Loss: White mates": 12
+		   "Win: Black mates": 1
+		   "Win: White mates": 4
+	*/
+
+	// TRANSPOSITION ERROR FIXED!!! ~250 elo
+	U64 Zobrist::pieceKeys[12][64];
 	U64 Zobrist::enPassantKeys[64];
 	U64 Zobrist::castlingKeys[16];
 	U64 Zobrist::sideKey;
 
 	void Zobrist::initRandomKeys() {
+
+		Magic::randomState = 1804289383;
 
 		for (int piece = Piece::P; piece <= Piece::k; piece++) {
 			for (int sq = 0; sq < 64; sq++) {
@@ -29,6 +55,11 @@ namespace Sloth {
 		for (int sq = 0; sq < 64; sq++) {
 			Zobrist::enPassantKeys[sq] = Magic::getRandomU64Num();
 		}
+		//for (int rank : {3, 6}) {
+			//for (int file = 0; file < 8; ++file) {
+				//Zobrist::enPassantKeys[rank * 8 + file] = Magic::getRandomU64Num();
+			//}
+		//}
 
 		for (int i = 0; i < 16; i++) {
 			Zobrist::castlingKeys[i] = Magic::getRandomU64Num();
@@ -265,7 +296,7 @@ namespace Sloth {
 					int piece = Piece::charToPiece(*fen);
 
 					setBit(Bitboards::bitboards[piece], sq);
-					
+
 					fen++;
 				}
 

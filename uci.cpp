@@ -276,13 +276,13 @@ namespace Sloth {
 			else if (strncmp(input, "uci", 3) == 0) {
 				printf("id name Sloth %s\n", VERSION);
 				printf("id author William Sjolund\n");
-				printf("option name Hash type spin default 64 min 4 max %d\n", MAX_HASH);
+				printf("option name Hash type spin default 64 min %d max %d\n", MIN_HASH, MAX_HASH);
 				printf("uciok\n");
 			}
 			else if (!strncmp(input, "setoption name Hash value ", 26)) {
 				sscanf_s(input, "%*s %*s %*s %*s %d", &mbHash);
 
-				if (mbHash < 4) mbHash = 4;
+				if (mbHash < MIN_HASH) mbHash = MIN_HASH;
 				if (mbHash > MAX_HASH) mbHash = MAX_HASH;
 
 				Search::initHashTable(mbHash);
