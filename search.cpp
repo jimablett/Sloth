@@ -1,20 +1,16 @@
 #include <iostream>
-
 #include <algorithm>
+
 #include "search.h"
 #include "evaluate.h"
 #include "movegen.h"
-
-//#include "ttable.h"
+#include "magic.h"
 
 #include "uci.h"
 
 namespace Sloth {
 
-
 	int Search::hashEntries = 0;
-
-	//HASHE Search::hashTable[hashEntry];
 
 	HASHE* Search::hashTable = NULL;
 
@@ -31,6 +27,7 @@ namespace Sloth {
 	int followPV, scorePV;
 
 	int Search::ply = 0;
+	int Search::contempt = 25;
 
 	unsigned long long nodes;
 
@@ -39,6 +36,9 @@ namespace Sloth {
 
 	int totalEntries = 0;
 	int usedEntries = 0;
+
+	const int lmpMargins[4] = {0, 8, 12, 24};
+	const int pieceValues[13] = { 100, 300, 300, 500, 900, VALUE_INFINITE, 100, 300, 300, 500, 900, VALUE_INFINITE, 0 };
 
 	void Search::clearHashTable() { // clears the transposition (hash) table
 		HASHE* hashEntry;
@@ -113,7 +113,6 @@ namespace Sloth {
 
 			*bestMove = hashEntry->bestMove;
 		}
-
 		return NO_HASH_ENTRY; // hash entry doesnt exist
 	}
 
@@ -123,17 +122,17 @@ namespace Sloth {
 		if (score < -MATE_SCORE) score -= Search::ply;
 		if (score > MATE_SCORE) score += Search::ply;
 
+		if (hashEntry->depth == 0)
+			usedEntries++;
+
 		hashEntry->hashKey = pos.hashKey;
 		hashEntry->score = score;
 		hashEntry->flag = hashFlag;
 		hashEntry->depth = depth;
 		hashEntry->bestMove = bestMove;
-		usedEntries++;
 	}
 
 	double hashFull() {
-		//return std::trunc((static_cast<double>(usedEntries) / totalEntries) * 100.0);
-
 		return 1000 * usedEntries / totalEntries;
 	}
 
@@ -169,48 +168,48 @@ namespace Sloth {
 		5. History moves
 		6. Unsorted moves
 	*/
-	
+
 	inline int Search::scoreMove(int move, Position& pos) {
+		int score = 0;
+
 		if (scorePV) {
 			if (pvTable[0][Search::ply] == move) {
 				scorePV = 0;
-
-				// give PV move the highest score
-				return 20000;
+				return 20000;  // give PV move the highest score
 			}
 		}
 
 		if (getMoveCapture(move)) {
 			int targetPiece = Piece::P;
+			int startPiece = (pos.sideToMove == Colors::white) ? Piece::p : Piece::P;
+			int endPiece = (pos.sideToMove == Colors::white) ? Piece::k : Piece::K;
 
-			int startPiece, endPiece;
-
-			startPiece = (pos.sideToMove == Colors::white) ? Piece::p : Piece::P;
-			endPiece = (pos.sideToMove == Colors::white) ? Piece::k : Piece::K;
+			// Store the target square to avoid repeated calculations
+			U64 targetSquare = getMoveTarget(move);
 
 			for (int bbPiece = startPiece; bbPiece <= endPiece; bbPiece++) {
-				if (getBit(Bitboards::bitboards[bbPiece], getMoveTarget(move))) {
+				U64 bb = Bitboards::bitboards[bbPiece];
+				if (getBit(bb, targetSquare)) {
 					targetPiece = bbPiece;
-
 					break;
 				}
 			}
 
-			return MVV_LVA[getMovePiece(move)][targetPiece] + 10000;
+			score = MVV_LVA[getMovePiece(move)][targetPiece] + 10000;
 		}
-		else { // scoring quiet move
+		else {  // scoring quiet move
+			int killerScore = 0;
 			if (killerMoves[0][Search::ply] == move) {
-				return 9000;
+				killerScore = 9000;
 			}
 			else if (killerMoves[1][Search::ply] == move) {
-				return 8000;
+				killerScore = 8000;
 			}
-			else {
-				return historyMoves[getMovePiece(move)][getMoveTarget(move)];
-			}
+
+			score = (killerScore != 0) ? killerScore : historyMoves[getMovePiece(move)][getMoveTarget(move)];
 		}
 
-		return 0;
+		return score;
 	}
 
 	inline int Search::sortMoves(Movegen::MoveList* moveList, int bestMove, Position& pos) {
@@ -258,6 +257,121 @@ namespace Sloth {
 		return 0; // no repetitions
 	}
 
+	static inline bool isEndgame(Position& pos) {
+		int pawnMaterial = Bitboards::countBits(Bitboards::bitboards[Piece::P] | Bitboards::bitboards[Piece::p]) * 100;
+		int knightMaterial = Bitboards::countBits(Bitboards::bitboards[Piece::N] | Bitboards::bitboards[Piece::n]) * 320;
+		int bishopMaterial = Bitboards::countBits(Bitboards::bitboards[Piece::B] | Bitboards::bitboards[Piece::b]) * 320;
+		int rookMaterial = Bitboards::countBits(Bitboards::bitboards[Piece::R] | Bitboards::bitboards[Piece::r]) * 500;
+		int queenMaterial = Bitboards::countBits(Bitboards::bitboards[Piece::Q] | Bitboards::bitboards[Piece::q]) * 950;
+
+		return ((pawnMaterial + knightMaterial + bishopMaterial + rookMaterial + queenMaterial) < 2600);
+	}
+
+	static inline int contemptFactor(Position& pos) {
+		if (isEndgame(pos))
+			return 0;
+		else
+			return pos.sideToMove == Colors::white ? -Search::contempt : Search::contempt;
+	}
+
+	static inline U64 considerXrays(int sq, U64 occ) {
+		U64 attackers = 0ULL;
+
+		U64 attackingBishops = Bitboards::bitboards[Piece::B] | Bitboards::bitboards[Piece::b];
+		U64 attackingRooks = Bitboards::bitboards[Piece::R] | Bitboards::bitboards[Piece::r];
+		U64 attackingQueens = Bitboards::bitboards[Piece::Q] | Bitboards::bitboards[Piece::q];
+
+		U64 intercardinalRays = Magic::getBishopAttacks(sq, occ);
+		U64 cardinalRays = Magic::getRookAttacks(sq, occ);
+
+		attackers |= intercardinalRays & (attackingBishops | attackingQueens);
+		attackers |= cardinalRays & (attackingRooks | attackingQueens);
+
+		return attackers;
+	}
+
+	static inline U64 minAttacker(U64 attadef, int sideToMove, int& attacker) {
+		int startPiece = Piece::P;
+		int endPiece = Piece::K;
+
+		if (sideToMove == Colors::black) {
+			startPiece = Piece::p;
+			endPiece = Piece::k;
+		}
+
+		for (attacker = startPiece; attacker <= endPiece; attacker++) {
+			U64 subset = attadef & Bitboards::bitboards[attacker];
+
+			if (subset) return (subset & (0 - subset));
+		}
+
+		return 0;
+	}
+
+	static inline int see(int move, Position& pos) {
+		int gain[32];
+		int idepth = 0;
+		int sideToMove = pos.sideToMove ^ 1;
+
+		int fromSq = getMoveSource(move);
+		int toSq = getMoveTarget(move);
+		int attacker = getMovePiece(move);
+
+		int startPiece = Piece::P;
+		int endPiece = Piece::K;
+		int target = -1;
+
+		if (sideToMove == Colors::black) {
+			startPiece = Piece::p;
+			endPiece = Piece::k;
+		}
+
+		for (int piece = startPiece; piece <= endPiece; piece++) {
+			if (getBit(Bitboards::bitboards[piece], toSq)) {
+				target = piece;
+
+				break;
+			}
+		}
+
+		if (target < 0) return 0;
+
+		U64 seen = 0ULL;
+		U64 occupied = Bitboards::occupancies[Colors::both];
+		U64 attackerBB = 1ULL << fromSq;
+
+		U64 attadef = pos.attackersTo(toSq, occupied);
+		U64 maxXray = occupied & ~(Bitboards::bitboards[Piece::N] | Bitboards::bitboards[Piece::K] | Bitboards::bitboards[Piece::n] | Bitboards::bitboards[Piece::k]);
+
+		gain[idepth] = pieceValues[target];
+
+		while (attackerBB) {
+			idepth++;
+			gain[idepth] = pieceValues[attacker] - gain[idepth - 1];
+
+			if (std::max(-gain[idepth - 1], gain[idepth]) < 0) {
+				break;
+			}
+
+			attadef &= ~attackerBB;
+			occupied &= ~attackerBB;
+			seen |= attackerBB;
+
+			if ((attackerBB & maxXray) != 0) {
+				attadef = considerXrays(toSq, occupied) & ~seen;
+			}
+
+			attackerBB = minAttacker(attadef, sideToMove, attacker);
+			sideToMove ^= 1;
+		}
+
+		for (idepth--; idepth > 0; idepth--) {
+			gain[idepth - 1] = -std::max(-gain[idepth - 1], gain[idepth]);
+		}
+
+		return gain[0];
+	}
+
 	static inline int quiescence(int alpha, int beta, Position& pos) {
 
 		if ((nodes & 2047) == 0) pos.time.communicate(); // listen to gui/user input every 2047 nodes
@@ -285,6 +399,8 @@ namespace Sloth {
 		Search::sortMoves(moveList, 0, pos);
 
 		for (int c = 0; c < moveList->count; c++) {
+			if (see(moveList->moves[c], pos) < 0) continue;
+			
 			copyBoard(pos);
 
 			Search::ply++;
@@ -366,9 +482,8 @@ namespace Sloth {
 			}
 		}
 
-		// this is better?
 		if (staticEval - 80 * depth >= beta && !kingCheck && depth < 9 && !pvNode) {
-			return staticEval - 80 * depth;
+			return staticEval;
 		}
 
 		// null move pruning
@@ -389,13 +504,7 @@ namespace Sloth {
 
 			pos.hashKey ^= Zobrist::sideKey;
 
-			//int R = ((823 + 67 * depth) / 256 + std::min((staticEval - beta) / 82, 3));
-
-			// test release reduction 3
-			score = -negamax(-beta, -beta + 1, depth - 1 - 2, pos); // search with reduced depth to find beta cutoffs (2 is the reduction limit)
-
-			//score = -negamax(-beta, -beta + 1, depth - 1 - std::max(0, R), pos);
-
+			score = -negamax(-beta, -beta + 1, depth - 2 - (depth >= 8 ? 3 : 2), pos);
 
 			Search::ply--;
 			Search::repetitionIndex--;
@@ -406,6 +515,12 @@ namespace Sloth {
 
 			// fail hard beta cutoff
 			if (score >= beta) return beta;
+		}
+
+		bool canFutilityPrune = false;
+
+		if (ply && !pvNode && (depth <= 8)) {
+			if ((staticEval + (168 * depth)) <= alpha) canFutilityPrune = true;
 		}
 
 		if (!pvNode && !kingCheck && depth <= 3) {
@@ -443,36 +558,9 @@ namespace Sloth {
 		sortMoves(moveList, bestMove, pos); // sort the moves to speed stuff up (doing the same in quiescence search)
 
 		int movesSearched = 0;
-		
-		//bool futileNode = depth < 15 && staticEval + 20 + 82 * depth < alpha;
 
 		for (int c = 0; c < moveList->count; c++) {
 			const int move = moveList->moves[c];
-
-			/*if (!pvNode && !kingCheck && !getMoveCapture(move) && !getMovePromotion(move)) {
-				if (depth <= 7 && legalMoves > 0 && staticEval + 80 * depth < alpha) {
-					nodes--;
-
-					continue;
-				}
-			}*/
-
-			/*
-			Score of Sloth OK config (fixes ply error) vs sloth LICHESS: 11 - 7 - 8 [0.577]
-			...      Sloth OK config (fixes ply error) playing White: 5 - 4 - 4  [0.538] 13
-			...      Sloth OK config (fixes ply error) playing Black: 6 - 3 - 4  [0.615] 13
-			...      White vs Black: 8 - 10 - 8  [0.462] 26
-			Elo difference: 53.9 +/- 116.1, LOS: 82.7 %, DrawRatio: 30.8 %
-			SPRT: llr 0 (0.0%), lbound -inf, ubound inf
-			26 of 26 games finished.
-			*/
-
-			// ~11 elo (54)
-			/*if (movesSearched > 0 && futileNode && !pvNode && !kingCheck) {
-				nodes--;
-
-				continue;
-			}*/
 
 			copyBoard(pos);
 
@@ -494,10 +582,36 @@ namespace Sloth {
 			if (movesSearched == 0) {
 				score = -negamax(-beta, -alpha, depth - 1, pos); // doing the normal AB search
 			}
-			else { // late move reduction
+			else {
+				// futility pruning on current move
 
+				if (canFutilityPrune && (legalMoves > 1)) {
+					if (!pos.isSquareAttacked(Bitboards::getLs1bIndex(Bitboards::bitboards[(pos.sideToMove == Colors::white) ? Piece::K : Piece::k]), pos.sideToMove ^ 1)
+						&& (killerMoves[0][ply] != move)
+						&& (killerMoves[1][ply] != move)
+						&& (getMovePiece(move) != Piece::P && getMovePiece(move) != Piece::p)
+						&& !getMovePromotion(move)
+						&& !getMoveCastling(move) && !getMoveCapture(move)) {
+
+						repetitionIndex--;
+						ply--;
+						takeBack(pos);
+
+						continue;
+					}
+				}
+
+				// late move pruning
+				if (ply && !pvNode && depth <= 3 && !kingCheck && !getMoveCapture(move) && (legalMoves > lmpMargins[depth])) {
+					repetitionIndex--;
+					ply--;
+					takeBack(pos);
+
+					continue;
+				}
+
+				// LMR
 				if (movesSearched >= fullDepthMoves && depth >= reductionLimit && kingCheck == 0 && getMoveCapture(move) == 0 && getMovePromotion(move) == 0) {
-					// ~23 elo with reductions
 					int R = 1 + depth / 4;
 
 					if (pvNode) R--;
@@ -522,12 +636,7 @@ namespace Sloth {
 			Search::repetitionIndex--;
 
 			takeBack(pos);
-
-			// deep futility pruning (only wins by 1, look at it later)
-			//if (score + (25 - depth * depth) <= alpha && !pvNode && !kingCheck) {
-			//	return score;
-			//}
-
+			
 			if (pos.time.stopped == true) return 0;
 
 			movesSearched++;
@@ -539,7 +648,8 @@ namespace Sloth {
 
 				bestMove = move;
 
-				if (getMoveCapture(move) == 0) // this CAN be removed
+				// store history moves
+				if (getMoveCapture(move) == 0)
 					historyMoves[getMovePiece(move)][getMoveTarget(move)] += depth;
 
 				alpha = score; //PV node
@@ -551,8 +661,6 @@ namespace Sloth {
 				}
 
 				pvLength[Search::ply] = pvLength[Search::ply + 1];
-
-				//report(score, depth, pos);
 
 				// using fail-hard beta cutoff
 				if (score >= beta) {
@@ -576,8 +684,7 @@ namespace Sloth {
 				return -MATE_VALUE + Search::ply;
 			}
 			else {
-				// stalemate score
-				return 0;
+				return contemptFactor(pos);
 			}
 		}
 

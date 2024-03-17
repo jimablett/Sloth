@@ -123,7 +123,6 @@ namespace Sloth {
 			}
 
 		}
-		//pos.printBoard();
 
 		// free the allocated memory
 		delete[] cmdCpy;
@@ -277,6 +276,8 @@ namespace Sloth {
 				printf("id name Sloth %s\n", VERSION);
 				printf("id author William Sjolund\n");
 				printf("option name Hash type spin default 64 min %d max %d\n", MIN_HASH, MAX_HASH);
+				printf("option name Contempt type spin default 25 min 0 max 200\n");
+
 				printf("uciok\n");
 			}
 			else if (!strncmp(input, "setoption name Hash value ", 26)) {
@@ -286,6 +287,16 @@ namespace Sloth {
 				if (mbHash > MAX_HASH) mbHash = MAX_HASH;
 
 				Search::initHashTable(mbHash);
+			}
+			else if (!strncmp(input, "setoption name Contempt value ", 30)) {
+				int contempt;
+
+				sscanf_s(input, "%*s %*s %*s %*s %d", &contempt);
+
+				if (contempt < 0) contempt = 0;
+				if (contempt > 200) contempt = 200;
+
+				Search::contempt = contempt;
 			}
 		}
 	}

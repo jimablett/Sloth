@@ -52,6 +52,7 @@ namespace Sloth {
             moveList->count++;
         }
 
+
         /*
             If unordered map is slow, consider using just a regular char array, with emtpy values to fill out
         */

@@ -25,6 +25,8 @@ namespace Sloth {
 
 		extern int bestMove;
 
+		extern int contempt;
+
 		void clearHashTable();
 		void initHashTable(int mb);
 		//extern inline void writeHashEntry(int score, int depth, int hashFlag, Position& pos);

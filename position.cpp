@@ -356,6 +356,10 @@ namespace Sloth {
 		else
 			enPassant = no_sq;
 
+		fen++;
+
+		fifty = atoi(fen);
+
 		// white pieces bitboards
 		for (int piece = Piece::P; piece <= Piece::K; piece++) {
 			Bitboards::occupancies[white] |= Bitboards::bitboards[piece];
@@ -422,7 +426,6 @@ namespace Sloth {
 			printf("     Hash key: %llx\n", hashKey);
 	}
 
-	// FOR LATER: this function might be slow. Attempt to make it more efficient with less calculations if possible.
 	inline int Position::isSquareAttacked(int square, int side) {
 		// attacked by white pawns
 		if ((side == Colors::white) && (Bitboards::pawnAttacks[Colors::black][square] & Bitboards::bitboards[Piece::P]))
@@ -448,7 +451,7 @@ namespace Sloth {
 		return 0;
 	}
 
-	U64 Position::attackersTo(int sq, U64 occ) { // for rook attacks and bishop attacks i might be able to use the arrays
+	U64 Position::attackersTo(int sq, U64 occ) {
 		return (bitboards[Piece::P] & pawnAttacks[black][sq]) |
 				(bitboards[Piece::p] & pawnAttacks[white][sq]) |
 			(knightAttacks[sq] & (bitboards[Piece::N] | bitboards[Piece::n])) |

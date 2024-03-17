@@ -65,22 +65,6 @@ namespace Sloth {
 		return ~occ & (color == Colors::white ? (pawns >> 8) : (pawns << 8)); // check these pawn pushes
 	}
 
-	U64 Bitboards::discoveredAttacks(int sq, int color) {
-		bool white = (color == Colors::white);
-
-		U64 enemyRooks = bitboards[white ? Piece::r : Piece::R];
-		U64 enemyBishops = bitboards[white ? Piece::b : Piece::B];
-
-		U64 occ = occupancies[Colors::both];
-		U64 rAttacks = Magic::getRookAttacks(sq, occ);
-		U64 bAttacks = Magic::getBishopAttacks(sq, occ);
-
-		U64 rooks = enemyRooks & ~rAttacks;
-		U64 bishops = enemyBishops & ~bAttacks;
-
-		return (rooks & Magic::getRookAttacks(sq, occ & ~rAttacks)) | (bishops & Magic::getBishopAttacks(sq, occ & ~bAttacks));
-	}
-
 	U64 Bitboards::maskPawnAttacks(int square, int side) {
 		U64 attacks = 0ULL;
 		U64 bitboard = 0ULL; // piece bb
@@ -177,4 +161,12 @@ namespace Sloth {
 			return -1;
 		}
 	}	
+
+	inline int Bitboards::msb(U64 bitboard) {
+		unsigned long index;
+
+		_BitScanReverse64(&index, bitboard);
+
+		return index;
+	}
 }

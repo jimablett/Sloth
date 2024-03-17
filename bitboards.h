@@ -49,6 +49,7 @@ namespace Sloth {
 
 		// get least significant 1st bit index
 		extern inline int getLs1bIndex(U64 bitboard);
+		extern inline int msb(U64 bb);
 	}
 }
 
