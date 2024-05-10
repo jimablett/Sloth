@@ -37,7 +37,7 @@ namespace Sloth {
 	int totalEntries = 0;
 	int usedEntries = 0;
 
-	const int lmpMargins[4] = {0, 8, 12, 24};
+	const int lmpMargins[4] = { 0, 8, 12, 24 };
 	const int pieceValues[13] = { 100, 300, 300, 500, 900, VALUE_INFINITE, 100, 300, 300, 500, 900, VALUE_INFINITE, 0 };
 
 	void Search::clearHashTable() { // clears the transposition (hash) table
@@ -399,8 +399,12 @@ namespace Sloth {
 		Search::sortMoves(moveList, 0, pos);
 
 		for (int c = 0; c < moveList->count; c++) {
-			if (see(moveList->moves[c], pos) < 0) continue;
-			
+			int staticExchangeEvaluation = see(moveList->moves[c], pos);
+
+			if (staticExchangeEvaluation < 0) continue;
+
+			if (eval + 97 <= alpha && staticExchangeEvaluation <= 0) continue;
+
 			copyBoard(pos);
 
 			Search::ply++;
@@ -439,7 +443,7 @@ namespace Sloth {
 		return alpha;
 	}
 
-	inline int Search::negamax(int alpha, int beta, int depth, Position& pos) {
+	inline int Search::negamax(int alpha, int beta, int depth, bool cutnode, Position& pos) {
 
 		pvLength[Search::ply] = Search::ply; // inits the PV length
 
@@ -474,6 +478,8 @@ namespace Sloth {
 
 		int staticEval = Eval::evaluate(pos);
 
+		if (ply && !pvNode && depth < 2 && (staticEval + 339) <= alpha) return quiescence(alpha, beta, pos);
+
 		if (depth < 3 && !pvNode && !kingCheck && abs(beta - 1) > -VALUE_INFINITE + 100) {
 			int evalMargin = 120 * depth;
 
@@ -504,7 +510,7 @@ namespace Sloth {
 
 			pos.hashKey ^= Zobrist::sideKey;
 
-			score = -negamax(-beta, -beta + 1, depth - 2 - (depth >= 8 ? 3 : 2), pos);
+			score = -negamax(-beta, -beta + 1, depth - 2 - (depth >= 8 ? 3 : 2), !cutnode, pos);
 
 			Search::ply--;
 			Search::repetitionIndex--;
@@ -523,7 +529,7 @@ namespace Sloth {
 			if ((staticEval + (168 * depth)) <= alpha) canFutilityPrune = true;
 		}
 
-		if (!pvNode && !kingCheck && depth <= 3) {
+		if (!pvNode && !kingCheck && depth <= 5) {
 			score = staticEval + 125;
 
 			if (score < beta) {
@@ -546,6 +552,9 @@ namespace Sloth {
 				}
 			}
 		}
+
+		// internal iterative reductions
+		if (cutnode && depth >= 7) depth -= 1;
 
 		Movegen::MoveList moveList[1];
 
@@ -580,7 +589,7 @@ namespace Sloth {
 			legalMoves++;
 
 			if (movesSearched == 0) {
-				score = -negamax(-beta, -alpha, depth - 1, pos); // doing the normal AB search
+				score = -negamax(-beta, -alpha, depth - 1, !cutnode, pos); // doing the normal AB search
 			}
 			else {
 				// futility pruning on current move
@@ -616,18 +625,18 @@ namespace Sloth {
 
 					if (pvNode) R--;
 
-					score = -negamax(-alpha - 1, -alpha, depth - 1 - std::max(0, R), pos);
+					score = -negamax(-alpha - 1, -alpha, depth - 1 - std::max(0, R), true, pos);
 				}
 				else
 					score = alpha + 1;
 
 				// principle variation search
 				if (score > alpha) {
-					score = -negamax(-alpha - 1, -alpha, depth - 1, pos); // better move has been found during LMR, re-search at full depth but with narrowed score bandwith
+					score = -negamax(-alpha - 1, -alpha, depth - 1, false, pos); // better move has been found during LMR, re-search at full depth but with narrowed score bandwith
 
 					// if fails to prove that other moves are bad
 					if ((score > alpha) && (score < beta)) { // if LMR fails, re-search at full depth and full score bandwith
-						score = -negamax(-beta, -alpha, depth - 1, pos);
+						score = -negamax(-beta, -alpha, depth - 1, !cutnode, pos);
 					}
 				}
 			}
@@ -636,7 +645,7 @@ namespace Sloth {
 			Search::repetitionIndex--;
 
 			takeBack(pos);
-			
+
 			if (pos.time.stopped == true) return 0;
 
 			movesSearched++;
@@ -697,7 +706,7 @@ namespace Sloth {
 
 	static int aspirate(int depth, int score, Position& pos) {
 		if (depth == 1) {
-			return Search::negamax(-VALUE_INFINITE, VALUE_INFINITE, depth, pos);
+			return Search::negamax(-VALUE_INFINITE, VALUE_INFINITE, depth, false, pos);
 		}
 
 		int delta = 100;
@@ -705,7 +714,7 @@ namespace Sloth {
 		int beta = std::min(score + delta, VALUE_INFINITE);
 
 		for (;; delta += delta / 2) {
-			score = Search::negamax(alpha, beta, depth, pos);
+			score = Search::negamax(alpha, beta, depth, false, pos);
 
 			if (score <= alpha) {
 				beta = (alpha + beta) / 2;

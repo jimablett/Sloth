@@ -232,7 +232,7 @@ namespace Sloth {
 
 		scorePiece(&score, mobility, mobility * 2);
 
-		// 12-9-5 for 15, 20
+
 		if (Bitboards::bitboards[piece] & pawnChains[white ? Colors::white : Colors::black][square]) {
 			scorePiece(&score, 15, 20);
 		}
@@ -246,6 +246,11 @@ namespace Sloth {
 
 		score.scoreOpening += POSITIONAL_SCORE[opening][KNIGHT][white ? square : MIRROR_SCORE[square]];
 		score.scoreEndgame += POSITIONAL_SCORE[endgame][KNIGHT][white ? square : MIRROR_SCORE[square]];
+
+		// ~40 elo including this but for bishops
+		if (getRank(square) == (white ? 7 : 0)) {
+			scorePiece(&score, -5, -5);
+		}
 
 		return score;
 	}
@@ -326,6 +331,11 @@ namespace Sloth {
 			scorePiece(&score, 4, 24);
 		}
 
+		// ~40 elo including this but for knights
+		if (getRank(square) == (white ? 7 : 0)) {
+			scorePiece(&score, -5, -5);
+		}
+
 		return score;
 	}
 
@@ -372,9 +382,15 @@ namespace Sloth {
 				PieceScore shieldScores = pawnShield[std::min(Bitboards::countBits(pawns), 3)];
 
 				scorePiece(&score, shieldScores.scoreOpening, shieldScores.scoreEndgame);
-
-
 			}
+
+			int myKingSq = Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::K : Piece::k]);
+			int theirKingSq = Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::k : Piece::K]);
+			int distance = squareDistance(myKingSq, theirKingSq);
+
+			int distScore = 10 * (7 - distance);
+
+			scorePiece(&score, distScore, distScore);
 		}
 
 		return score;
@@ -395,7 +411,7 @@ namespace Sloth {
 		return w + b;
 	}
 
-	inline bool isDraw() {
+	inline bool isDraw(Position& pos) {
 
 		if (Bitboards::countBits(Bitboards::occupancies[Colors::both]) < 5) {
 			// king vs king is a draw
@@ -448,17 +464,8 @@ namespace Sloth {
 
 		PieceScore P, N, B, R, Q, K, p, n, b, r, q, k;
 
-		//if (pos.fifty >= 100) return 0;
-
 		if (phase.gamePhase == endgame) {
-			if (isDraw()) return 0;
-
-			/*if (Bitboards::countBits(Bitboards::occupancies[Colors::both]) < 5) {
-				// king vs king is a draw
-				if ((Bitboards::occupancies[Colors::both] & ~(Bitboards::bitboards[Piece::K] | Bitboards::bitboards[Piece::k])) == 0) {
-					return 0;
-				}
-			}*/
+			if (isDraw(pos)) return 0;
 		}
 
 		for (int bbPiece = Piece::P; bbPiece <= Piece::k; bbPiece++) {

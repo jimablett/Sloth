@@ -39,7 +39,7 @@ namespace Sloth {
 		
 		//extern inline int staticExchangeEvaluation(int move, Position& pos);
 
-		extern inline int negamax(int alpha, int beta, int depth, Position& pos);
+		extern inline int negamax(int alpha, int beta, int depth, bool cutnode, Position& pos);
 
 		//extern inline int aspirationSearch(int alpha, int beta, int depth, Position& pos);
 

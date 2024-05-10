@@ -48,10 +48,11 @@ int main(int argc, char* argv[])
 
         Movegen::MoveList movelist[1];
 
-        pos.parseFen("8/8/8/8/8/8/PPPPPPPP/8 w - - 0 1");
+        pos.parseFen("8/8/4p3/4P3/8/8/8/8 w - - 0 1");
        
         pos.printBoard();
-        
+
+        Eval::evaluate(pos);
     } else UCI::loop();
 
     free(Search::hashTable);

@@ -52,11 +52,6 @@ namespace Sloth {
             moveList->count++;
         }
 
-
-        /*
-            If unordered map is slow, consider using just a regular char array, with emtpy values to fill out
-        */
-        // THIS MIGHT BE SLOW!!!!!!!!!!!!!!
         extern std::unordered_map<Piece::Pieces, char> promotedPieces;
 
         extern inline void printMove(int move);
