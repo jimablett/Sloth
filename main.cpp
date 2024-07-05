@@ -19,8 +19,6 @@
 #include "movegen.h"
 #include "types.h"
 
-
-// testing
 #include "position.h"
 #include "perft.h"
 #include "uci.h"
@@ -31,13 +29,10 @@ using namespace Sloth;
 
 int main(int argc, char* argv[])
 {
-    //Position pos;
-
     Magic::initAttacks();
     Bitboards::initLeaperAttacks();
     Zobrist::initRandomKeys();
     Search::initHashTable(64);
-    //TranspositionTable::initTT();
     Eval::initEvalMasks();
     //game.parseFen(startPosition);
 

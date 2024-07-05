@@ -27,7 +27,7 @@ namespace Sloth {
 	int followPV, scorePV;
 
 	int Search::ply = 0;
-	int Search::contempt = 25;
+	int Search::contempt = 0;
 
 	unsigned long long nodes;
 
@@ -45,8 +45,6 @@ namespace Sloth {
 
 		totalEntries = hashEntries;
 		usedEntries = 0;
-
-		//std::memset(Search::hashTable, 0, sizeof(Search::hashTable));
 
 		for (hashEntry = hashTable; hashEntry < hashTable + hashEntries; hashEntry++) {
 			hashEntry->hashKey = 0;
@@ -84,36 +82,27 @@ namespace Sloth {
 		}
 	}
 
-	static inline int readHashEntry(int alpha, int beta, int* bestMove, int depth, Position& pos) {
+	static inline HASHE* readHashEntry(int alpha, int beta, int* bestMove, int depth, Position& pos, bool* hit) {
 		HASHE* hashEntry = &Search::hashTable[pos.hashKey % Search::hashEntries]; // pointer to hash entry
+
+		*hit = false; // initialize hit to false
 
 		if (hashEntry->hashKey == pos.hashKey) { // make sure that we are dealing with the exact position that we need
 			if (hashEntry->depth >= depth) {
-
 				int score = hashEntry->score;
 
 				if (score < -MATE_SCORE) score += Search::ply;
 				if (score > MATE_SCORE) score -= Search::ply;
 
-				// matching PV node score
-				if (hashEntry->flag == hashfEXACT) {
-					return score;
-				}
-
-				// match alpha score
-				if ((hashEntry->flag == hashfALPHA) && (score <= alpha)) {
-					return alpha;
-				}
-
-				// match beta score
-				if ((hashEntry->flag == hashfBETA) && (score >= beta)) {
-					return beta;
-				}
+				*bestMove = hashEntry->bestMove;
+				*hit = true;
 			}
-
-			*bestMove = hashEntry->bestMove;
+			else {
+				*bestMove = hashEntry->bestMove;
+			}
 		}
-		return NO_HASH_ENTRY; // hash entry doesnt exist
+
+		return (*hit) ? hashEntry : nullptr; // return the hash entry if hit, otherwise nullptr
 	}
 
 	static inline void writeHashEntry(int score, int bestMove, int depth, int hashFlag, Position& pos) {
@@ -374,6 +363,28 @@ namespace Sloth {
 
 	static inline int quiescence(int alpha, int beta, Position& pos) {
 
+		bool ttHit;
+
+		int bestMove = 0;
+
+		HASHE* ttEntry = readHashEntry(alpha, beta, &bestMove, 0, pos, &ttHit);
+
+		int ttMove = 0;
+		int ttEval = EVAL_UNKNOWN;
+		int ttFlag = NO_HASH_ENTRY;
+		int ttDepth = 0;
+
+		if (ttHit) {
+			ttMove = ttEntry->bestMove;
+			ttEval = ttEntry->score;
+			ttFlag = ttEntry->flag;
+			ttDepth = ttEntry->depth;
+		}
+
+		if (ttDepth >= 0 && ttEval != EVAL_UNKNOWN && ((ttFlag == hashfALPHA && ttEval <= alpha) || (ttFlag == hashfBETA && ttEval >= beta) || (ttFlag == hashfEXACT))) {
+			return ttEval;
+		}
+
 		if ((nodes & 2047) == 0) pos.time.communicate(); // listen to gui/user input every 2047 nodes
 
 		nodes++;
@@ -456,8 +467,24 @@ namespace Sloth {
 
 		if (Search::ply && isRepetition(pos)) return 0; // draw score, repetition has occured
 
-		if (Search::ply && (score = readHashEntry(alpha, beta, &bestMove, depth, pos)) != NO_HASH_ENTRY && !pvNode) { // if move has already been searched then return score immediately
-			return score;
+		bool ttHit;
+
+		HASHE* ttEntry = readHashEntry(alpha, beta, &bestMove, depth, pos, &ttHit);
+
+		int ttMove = 0;
+		int ttEval = EVAL_UNKNOWN;
+		int ttFlag = NO_HASH_ENTRY;
+		int ttDepth = 0;
+
+		if (ttHit) {
+			ttMove = ttEntry->bestMove;
+			ttEval = ttEntry->score;
+			ttFlag = ttEntry->flag;
+			ttDepth = ttEntry->depth;
+		}
+
+		if (!pvNode && ttDepth >= depth && ttEval != EVAL_UNKNOWN && ((ttFlag == hashfALPHA && ttEval <= alpha) || (ttFlag == hashfBETA && ttEval >= beta) || (ttFlag == hashfEXACT))) {
+			return ttEval;
 		}
 
 		if ((nodes & 2047) == 0) pos.time.communicate();
@@ -520,7 +547,12 @@ namespace Sloth {
 			if (pos.time.stopped == true) return 0; // returns 0 if time is up
 
 			// fail hard beta cutoff
-			if (score >= beta) return beta;
+			if (score >= beta) {
+				// store hash entry
+				writeHashEntry(beta, bestMove, depth, hashfBETA, pos);
+
+				return beta;
+			}
 		}
 
 		bool canFutilityPrune = false;
@@ -554,11 +586,55 @@ namespace Sloth {
 		}
 
 		// internal iterative reductions
-		if (cutnode && depth >= 7) depth -= 1;
+		if (cutnode && depth >= 8 && (!ttMove || ttFlag == hashfALPHA)) depth -= 1 + !ttMove;
 
 		Movegen::MoveList moveList[1];
 
 		Movegen::generateMoves(pos, moveList, false);
+
+		// ProbCut
+
+		int probCutBeta = std::min(beta + 227, MATE_VALUE - MAX_PLY - 1);
+
+		if (depth >= 6 && !pvNode && !kingCheck && ply > 0 && !(ttDepth >= depth - 3 && ttEval != EVAL_UNKNOWN && ttEval < probCutBeta)) {
+			int probCutBeta = beta + 172;
+			int reducedDepth = depth - 4;
+
+			for (int c = 0; c < moveList->count; c++) {
+
+				copyBoard(pos);
+
+				Search::ply++;
+
+				Search::repetitionIndex++;
+				Search::repetitionTable[Search::repetitionIndex] = pos.hashKey;
+
+				if (pos.makeMove(pos, moveList->moves[c], allMoves) == 0) {
+					Search::ply--;
+
+					Search::repetitionIndex--;
+
+					continue; // skip to next move
+				}
+
+				score = -quiescence(-probCutBeta, -probCutBeta + 1, pos);
+
+				if (score >= probCutBeta) {
+					score = -negamax(-probCutBeta, -probCutBeta + 1, depth - 4, !cutnode, pos);
+				}
+
+				Search::ply--;
+				Search::repetitionIndex--;
+
+				takeBack(pos);
+
+				if (score >= probCutBeta) {
+					writeHashEntry(score, moveList->moves[c], depth, hashfBETA, pos);
+
+					return score;
+				}
+			}
+		}
 
 		if (followPV) {
 			enablePVScoring(moveList);
@@ -657,9 +733,7 @@ namespace Sloth {
 
 				bestMove = move;
 
-				// store history moves
-				if (getMoveCapture(move) == 0)
-					historyMoves[getMovePiece(move)][getMoveTarget(move)] += depth;
+				historyMoves[getMovePiece(move)][getMoveTarget(move)] += depth;
 
 				alpha = score; //PV node
 
@@ -744,9 +818,7 @@ namespace Sloth {
 		memset(killerMoves, 0, sizeof(killerMoves));
 		memset(historyMoves, 0, sizeof(historyMoves));
 		memset(pvTable, 0, sizeof(pvTable));
-		memset(pvLength, 0, sizeof(pvLength)); // is this really needed?
-
-		//clearHashTable();
+		memset(pvLength, 0, sizeof(pvLength));
 
 		int alpha = -VALUE_INFINITE;
 		int beta = VALUE_INFINITE;

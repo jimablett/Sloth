@@ -181,7 +181,6 @@ namespace Sloth {
 			perft = true;
 		}
 
-
 		if (!perft) {
 			if (pos.time.moveTime != -1) {
 				pos.time.time = pos.time.moveTime;
@@ -217,17 +216,6 @@ namespace Sloth {
 		}
 
 		delete[] cmdCpy;
-		/*if (curDepth = strstr(cmdCpy, "depth")) {
-			// convert str to int and assign result val to depth
-			depth = atoi(curDepth + 6); // points to the number in go depth 7
-		}
-		else {
-			depth = 4; // diff time control placeholder
-		}*/
-
-
-		//printf("Depth: %d\n", depth);
-
 	}
 
 	void UCI::loop() {
@@ -276,7 +264,7 @@ namespace Sloth {
 				printf("id name Sloth %s\n", VERSION);
 				printf("id author William Sjolund\n");
 				printf("option name Hash type spin default 64 min %d max %d\n", MIN_HASH, MAX_HASH);
-				printf("option name Contempt type spin default 25 min 0 max 200\n");
+				printf("option name Contempt type spin default 0 min 0 max 200\n");
 
 				printf("uciok\n");
 			}

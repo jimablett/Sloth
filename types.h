@@ -5,7 +5,7 @@
 #include "bitboards.h"
 #pragma warning(disable: 4554)
 
-#define VERSION "1.8"
+#define VERSION "1.9"
 
 #define emptyBoard "8/8/8/8/8/8/8/8 b - - "
 #define startPosition "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -26,8 +26,11 @@
 #define hashfALPHA 1
 #define hashfBETA 2
 
+#define EVAL_UNKNOWN 32000
 #define MATE_VALUE 49000
 #define MATE_SCORE 48000
+
+#define MAX(A, B) ((A) > (B) ? (A) : (B))
 
 typedef struct { // transposition table
     U64 hashKey;

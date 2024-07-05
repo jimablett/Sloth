@@ -12,11 +12,6 @@
 
 namespace Sloth {
 
-	template <typename T>
-	constexpr const T& clamp(const T& value, const T& min, const T& max) {
-		return std::min(std::max(value, min), max);
-	}
-
 	U64 Eval::fileMasks[64];
 	U64 Eval::rankMasks[64];
 
@@ -44,10 +39,32 @@ namespace Sloth {
 	const int isolatedPawnPenaltyOpening = -5;
 	const int isolatedPawnPenaltyEndgame = -10;
 
-	const int passedPawnBonus[8] = { 0, 10, 30, 50, 75, 100, 150, 200 }; // each val corresponds to a rank (meaning +200 score if passed pawn is on 7)
-
 	const int semiFile = 10; // score for semi open file
 	const int openFile = 15; // score for open file
+
+	const PieceScore RookFile[2] = { S(semiFile, semiFile), S(34, 8) };
+
+	// Scores for passed pawns
+	const PieceScore passedPawn[2][2][8] = {
+		{{S(0,   0), S(-10,  -1), S(-11,   6), S(-16,   7),
+		  S(2,   5), S(24,  -1), S(41,  12), S(0,   0)},
+		 {S(0,   0), S(-7,    3), S(-10,  11), S(-14,  11),
+		  S(-1,  14), S(29,  14), S(48,  24), S(0,   0)}},
+		{{S(0,   0), S(-7,    7), S(-12,   9), S(-15,  14),
+		  S(2,  16), S(27,  19), S(65,  31), S(0,   0)},
+		 {S(0,   0), S(-7,    6), S(-10,   9), S(-14,  15),
+		  S(2,  22), S(24,  42), S(31,  73), S(0,   0)}},
+	};
+
+	const PieceScore passedFriendlyDistance[8] = {
+		S(0,   0), S(-2,   0), S(0,  -2), S(2,  -6),
+		S(3, -10), S(-4, -10), S(-4,  -4), S(0,   0),
+	};
+
+	const PieceScore passedEnemyDistance[8] = {
+		 S(0,   0), S(2,   0), S(4,   0), S(4,   6),
+		S(0,  12), S(0,  18), S(8,  18), S(0,   0),
+	};
 
 	U64 forwardRanksMasks[2][8];
 
@@ -106,27 +123,16 @@ namespace Sloth {
 		return sq % 8;
 	}
 
-	U64 pawnChains[2][64];
+	U64 backwardMasks[64];
+	U64 connectedMasks[64];
+
+	int distanceBetween[64][64];
 
 	void Eval::initEvalMasks() {
-		for (int sq = 0; sq < 64; sq++) {
-			U64 bb = 1ULL << sq;
 
-			if (sq % 8 != 0) {
-				pawnChains[0][sq] |= (bb << 9);
-			}
-
-			if (sq % 8 != 7) {
-				pawnChains[0][sq] |= (bb << 7);
-			}
-
-			if (sq % 8 != 0) {
-				pawnChains[1][sq] |= (bb >> 7);
-			}
-			if (sq % 8 != 7) {
-				pawnChains[1][sq] |= (bb >> 9);
-			}
-		}
+		for (int sq1 = 0; sq1 < 64; sq1++)
+			for (int sq2 = 0; sq2 < 64; sq2++)
+				distanceBetween[sq1][sq2] = MAX(std::abs(fileOf(sq1) - fileOf(sq2)), std::abs(rankOf(sq1) - rankOf(sq2)));
 
 		for (int rank = 0; rank < 8; rank++) {
 			for (int file = 0; file < 8; file++) {
@@ -138,8 +144,29 @@ namespace Sloth {
 				isolatedMasks[sq] |= setFileRankMask(file - 1, -1);
 				isolatedMasks[sq] |= setFileRankMask(file + 1, -1);
 
-				//Bitboards::printBitboard(isolatedMasks[sq], false); // if isolated masks bugged then look at this
+				for (int r = rank - 1; r >= 0; r--) {
+					if (file > 0) backwardMasks[sq] |= (1ULL << (r * 8 + (file - 1)));
+					if (file < 7) backwardMasks[sq] |= (1ULL << (r * 8 + (file + 1)));
+				}
+
+				// Initialize connected masks
+				if (file > 0) {
+					connectedMasks[sq] |= (1ULL << (rank * 8 + (file - 1))); // same rank
+					if (rank > 0) connectedMasks[sq] |= (1ULL << ((rank - 1) * 8 + (file - 1))); // rank-1
+					if (rank < 7) connectedMasks[sq] |= (1ULL << ((rank + 1) * 8 + (file - 1))); // rank+1
+				}
+				if (file < 7) {
+					connectedMasks[sq] |= (1ULL << (rank * 8 + (file + 1))); // same rank
+					if (rank > 0) connectedMasks[sq] |= (1ULL << ((rank - 1) * 8 + (file + 1))); // rank-1
+					if (rank < 7) connectedMasks[sq] |= (1ULL << ((rank + 1) * 8 + (file + 1))); // rank+1
+				}
 			}
+		}
+
+		for (int rank = 0; rank < 8; rank++) {
+			for (int i = rank; i < 8; i++)
+				forwardRanksMasks[Colors::white][rank] |= rankMasks[i];
+			forwardRanksMasks[Colors::black][rank] = ~forwardRanksMasks[Colors::white][rank] | rankMasks[rank];
 		}
 
 		for (int rank = 0; rank < 8; rank++) { // ugly but it works
@@ -205,7 +232,15 @@ namespace Sloth {
 		return square % 8;
 	}
 
-	inline PieceScore evaluatePawns(int piece, int square, int sideToMove) { // piece variable will switch between black and white pawns
+	bool testBit(U64 bb, int i) {
+		return bb & (1ULL << i);
+	}
+
+	U64 pawnAdvance(U64 pawns, U64 occ, int color) {
+		return ~occ & (color == Colors::white ? (pawns << 8) : (pawns >> 8));
+	}
+
+	inline PieceScore evaluatePawns(int piece, int square, int sideToMove, Position& pos) { // piece variable will switch between black and white pawns
 		int doubled = Bitboards::countBits(Bitboards::bitboards[piece] & Eval::fileMasks[square]); // returns the amount of doubled pawns on the board for said piece side
 		PieceScore score = { 0 };
 
@@ -216,6 +251,9 @@ namespace Sloth {
 		score.scoreOpening += POSITIONAL_SCORE[opening][PAWN][white ? square : MIRROR_SCORE[square]];
 		score.scoreEndgame += POSITIONAL_SCORE[endgame][PAWN][white ? square : MIRROR_SCORE[square]];
 
+		U64 myPawns = Bitboards::bitboards[white ? Piece::P : Piece::p];
+		int ourColor = white ? Colors::white : Colors::black;
+
 		if (doubled > 1) {
 			scorePiece(&score, (doubled - 1) * doublePawnPenaltyOpening, (doubled - 1) * doublePawnPenaltyEndgame); // this line adds penalty to the current piece, one for opening, and one for endgame
 		}
@@ -224,17 +262,56 @@ namespace Sloth {
 			scorePiece(&score, isolatedPawnPenaltyOpening, isolatedPawnPenaltyEndgame);
 		}
 
+		// Passed pawn (~26 elo)
+
+		/*
+		Techniques borrowed from Ethereal (https://github.com/AndyGrant/Ethereal/)
+		*/
 		if ((passedMask[square] & Bitboards::bitboards[white ? Piece::p : Piece::P]) == 0) {
-			scorePiece(&score, passedPawnBonus[getRank(square)], passedPawnBonus[getRank(square)]);
+			PieceScore eval = { 0 };
+
+			U64 bitboard = pawnAdvance(1ULL << square, 0ULL, ourColor);
+			U64 attackedByEnemy = pos.attackedBy(white ? Colors::black : Colors::white);
+			int rank = rankOf(square);
+
+			int dist, flag = 0;
+
+			bool canAdvance = !(bitboard & Bitboards::occupancies[Colors::both]);
+			bool safeAdvance = !(bitboard & attackedByEnemy);
+
+			eval.scoreOpening += passedPawn[canAdvance][safeAdvance][rank].scoreOpening;
+			eval.scoreEndgame += passedPawn[canAdvance][safeAdvance][rank].scoreEndgame;
+
+			// Evaluate dist from our king
+			dist = distanceBetween[square][Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::K : Piece::k])];
+			eval.scoreOpening += dist * passedFriendlyDistance[rank].scoreOpening;
+			eval.scoreEndgame += dist * passedFriendlyDistance[rank].scoreEndgame;
+
+			// Evaluate dist from their king
+			dist = distanceBetween[square][Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::k : Piece::K])];
+			eval.scoreOpening += dist * passedEnemyDistance[rank].scoreOpening;
+			eval.scoreEndgame += dist * passedEnemyDistance[rank].scoreEndgame;
+
+			// Apply bonus when path to promotion is clear
+			bitboard = forwardRanksMasks[ourColor][rankOf(square)] & Eval::fileMasks[fileOf(square)];
+			flag = !(bitboard & (Bitboards::occupancies[white ? Colors::black : Colors::white] | attackedByEnemy));
+
+			eval.scoreOpening += flag * -47;
+			eval.scoreEndgame += flag * 57;
+
+			scorePiece(&score, eval.scoreOpening, eval.scoreEndgame);
 		}
 
 		int mobility = Bitboards::countBits(~Bitboards::occupancies[Colors::both] & Bitboards::pawnAdvance(1ULL << square, 0ULL, white ? Colors::white : Colors::black));
 
 		scorePiece(&score, mobility, mobility * 2);
 
+		if ((Bitboards::bitboards[piece] & backwardMasks[square]) == 0) {
+			scorePiece(&score, -4, -7);
+		}
 
-		if (Bitboards::bitboards[piece] & pawnChains[white ? Colors::white : Colors::black][square]) {
-			scorePiece(&score, 15, 20);
+		if ((Bitboards::bitboards[piece] & connectedMasks[square]) != 0) {
+			scorePiece(&score, 4, 10);
 		}
 
 		return score;
@@ -259,17 +336,27 @@ namespace Sloth {
 		PieceScore score = { 0 };
 		bool white = (piece == Piece::R);
 
+		int ourColor = white ? Colors::white : Colors::black;
+
 		score.scoreOpening += POSITIONAL_SCORE[opening][ROOK][white ? square : MIRROR_SCORE[square]];
 		score.scoreEndgame += POSITIONAL_SCORE[endgame][ROOK][white ? square : MIRROR_SCORE[square]];
 
-		// semi open file
-		if ((Bitboards::bitboards[white ? Piece::P : Piece::p] & Eval::fileMasks[square]) == 0) {
-			scorePiece(&score, semiFile, semiFile); // adds the bonus
-		}
+		U64 myPawns = Bitboards::bitboards[white ? Piece::P : Piece::p];
+		U64 enemyPawns = Bitboards::bitboards[white ? Piece::p : Piece::P];
 
-		// open file
-		if (((Bitboards::bitboards[Piece::P] | Bitboards::bitboards[Piece::p]) & Eval::fileMasks[square]) == 0) {
-			scorePiece(&score, openFile, openFile);
+		U64 enemyKing = Bitboards::bitboards[white ? Piece::k : Piece::K];
+
+
+		// open/semi open file evaluation
+		// +17 elo compared to the previous -40 ish
+
+		/*
+		Techniques borrowed from Ethereal (https://github.com/AndyGrant/Ethereal/)
+		*/
+		if (!(myPawns & Eval::fileMasks[square])) {
+			bool open = !(enemyPawns & Eval::fileMasks[square]);
+
+			scorePiece(&score, RookFile[open].scoreOpening, RookFile[open].scoreEndgame);
 		}
 
 		// bonus if friendly rooks are doubled
@@ -292,7 +379,7 @@ namespace Sloth {
 		return score;
 	}
 
-	inline PieceScore getPieceMobility(bool bishop, int square) { //  MIGHT DO: on runtime start, calculate all bishop attacks for each square so that it can be fetched from bishopAttacks array
+	inline PieceScore getPieceMobility(bool bishop, int square) {
 		PieceScore score = { 0 };
 
 		if (bishop) {
@@ -304,17 +391,7 @@ namespace Sloth {
 			score.scoreEndgame += (Bitboards::countBits(Magic::getQueenAttacks(square, Bitboards::occupancies[both])) - queenUnit) * queenMobilityEnd;
 		}
 
-		//Bitboards::printBitboard(Magic::getBishopAttacks(square, Bitboards::occupancies[Colors::both]), false);
-
 		return score;
-	}
-
-	bool testBit(U64 bb, int i) {
-		return bb & (1ULL << i);
-	}
-
-	U64 pawnAdvance(U64 pawns, U64 occ, int color) {
-		return ~occ & (color == Colors::white ? (pawns << 8) : (pawns >> 8));
 	}
 
 	inline PieceScore evaluateBishops(int piece, int square) {
@@ -362,6 +439,12 @@ namespace Sloth {
 		score.scoreOpening += POSITIONAL_SCORE[opening][KING][white ? square : MIRROR_SCORE[square]];
 		score.scoreEndgame += POSITIONAL_SCORE[endgame][KING][white ? square : MIRROR_SCORE[square]];
 
+		int myKingSq = Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::K : Piece::k]);
+		int theirKingSq = Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::k : Piece::K]);
+		int distance = squareDistance(myKingSq, theirKingSq);
+
+		int distScore = 10 * (7 - distance);
+
 		if (phase.gamePhase != endgame) { // prolly dont need this, however, intention is to make the king be more careful during the active phases of the game
 			if ((Bitboards::bitboards[white ? Piece::P : Piece::p] & Eval::fileMasks[square]) == 0) { // king on semi open file
 				scorePiece(&score, -semiFile, -semiFile); // -semifile will turn it into a penalty
@@ -383,15 +466,17 @@ namespace Sloth {
 
 				scorePiece(&score, shieldScores.scoreOpening, shieldScores.scoreEndgame);
 			}
-
-			int myKingSq = Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::K : Piece::k]);
-			int theirKingSq = Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::k : Piece::K]);
-			int distance = squareDistance(myKingSq, theirKingSq);
-
-			int distScore = 10 * (7 - distance);
-
-			scorePiece(&score, distScore, distScore);
 		}
+		else {
+			U64 myQueens = Bitboards::bitboards[white ? Piece::Q : Piece::q];
+			U64 enemyQueenRooks = Bitboards::countBits(white ? Piece::q : Piece::Q) + Bitboards::countBits(white ? Piece::r : Piece::R);
+
+			if (Bitboards::countBits(myQueens) > 0 && enemyQueenRooks == 0) {
+				distScore *= 2; // in case of a king queen vs king situation, we encourage the friendly king to move closer so that we can mate
+			}
+		}
+
+		scorePiece(&score, distScore, distScore);
 
 		return score;
 	}
@@ -482,7 +567,7 @@ namespace Sloth {
 				switch (piece)
 				{
 				case Piece::P:
-					P = evaluatePawns(Piece::P, square, pos.sideToMove);
+					P = evaluatePawns(Piece::P, square, pos.sideToMove, pos);
 					scores.scoreOpening += P.scoreOpening;
 					scores.scoreEndgame += P.scoreEndgame;
 
@@ -519,7 +604,7 @@ namespace Sloth {
 					break;
 
 				case Piece::p:
-					p = evaluatePawns(Piece::p, square, pos.sideToMove);
+					p = evaluatePawns(Piece::p, square, pos.sideToMove, pos);
 					scores.scoreOpening -= p.scoreOpening;
 					scores.scoreEndgame -= p.scoreEndgame;
 
@@ -568,8 +653,7 @@ namespace Sloth {
 				EXAMPLE: score for pawn on d4 at phase 5000 would be:
 				interpolatedScore = (12 * 5000 + (-7) * (6192 - 5000)) / 6192 = 8.34237726098
 			*/
-			//scores.score = (scores.scoreOpening * phase.phaseScore + scores.scoreEndgame * (openingScore - phase.phaseScore)) / openingScore;
-			scores.score = ((scores.scoreOpening * phase.phaseScore + scores.scoreEndgame * (openingScore - phase.phaseScore)) / openingScore); //* evaluateDrawishness();
+			scores.score = (scores.scoreOpening * phase.phaseScore + scores.scoreEndgame * (openingScore - phase.phaseScore)) / openingScore;
 		}
 		else if (phase.gamePhase == opening) {
 			scores.score = scores.scoreOpening; // pure opening score in opening
