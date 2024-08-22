@@ -9,6 +9,11 @@ namespace Sloth {
 
     namespace Search {
 
+        struct SearchStack {
+            int ply;
+            int staticEval;
+        };
+
         extern int hashEntries;
 
         extern HASHE *hashTable;
@@ -28,7 +33,7 @@ namespace Sloth {
         void printMoveScores(Movegen::MoveList* moveList, Position& pos);
 
         extern inline int scoreMove(int move, Position& pos);
-        extern inline int sortMoves(Movegen::MoveList* moveList, int bestMove, Position& pos);
+        extern inline void sortMoves(Movegen::MoveList* moveList, int bestMove, Position& pos);
 
         extern inline int negamax(int alpha, int beta, int depth, bool cutnode, Position& pos);
 

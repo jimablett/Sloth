@@ -13,28 +13,6 @@
 using namespace Sloth::Bitboards;
 
 namespace Sloth {
-	//U64 Zobrist::pieceKeys[12][4];
-
-	/*
-			Score of Sloth OK config (fixes ply error) vs sloth LICHESS: 21 - 5 - 0 [0.808]
-		...      Sloth OK config (fixes ply error) playing White: 12 - 1 - 0  [0.923] 13
-		...      Sloth OK config (fixes ply error) playing Black: 9 - 4 - 0  [0.692] 13
-		...      White vs Black: 16 - 10 - 0  [0.615] 26
-		Elo difference: 249.3 +/- 217.5, LOS: 99.9 %, DrawRatio: 0.0 %
-		SPRT: llr 0 (0.0%), lbound -inf, ubound inf
-		26 of 26 games finished.
-
-		Player: Sloth OK config (fixes ply error)
-		   "Loss: Black mates": 1
-		   "Loss: White mates": 4
-		   "Win: Black mates": 9
-		   "Win: White mates": 12
-		Player: sloth LICHESS
-		   "Loss: Black mates": 9
-		   "Loss: White mates": 12
-		   "Win: Black mates": 1
-		   "Win: White mates": 4
-	*/
 
 	// TRANSPOSITION ERROR FIXED!!! ~250 elo
 	U64 Zobrist::pieceKeys[12][64];
@@ -99,7 +77,7 @@ namespace Sloth {
 		// quiet
 		if (moveFlag == MoveType::allMoves) {
 			copyBoard(pos);
-			
+
 			int sourceSquare = getMoveSource(move);
 			int targetSquare = getMoveTarget(move);
 			int piece = getMovePiece(move);
@@ -127,7 +105,7 @@ namespace Sloth {
 
 				startPiece = (pos.sideToMove == Colors::white) ? Piece::p : Piece::P;
 				endPiece = (pos.sideToMove == Colors::white) ? Piece::k : Piece::K;
-				
+
 				pos.fifty = 0;
 
 				// loop over bb opposite to current side to move
@@ -155,6 +133,10 @@ namespace Sloth {
 			}
 
 			if (enPassantFlag) {
+				/////////// CHANGE
+				/*(pos.sideToMove == Colors::white)
+					? popBit(Bitboards::bitboards[Piece::p], targetSquare + 8)
+					: popBit(Bitboards::bitboards[Piece::P], targetSquare - 8);*/
 
 				if (pos.sideToMove == Colors::white) {
 					popBit(Bitboards::bitboards[Piece::p], targetSquare + 8);
@@ -235,7 +217,7 @@ namespace Sloth {
 
 			// update occupancies
 			memset(Bitboards::occupancies, 0ULL, 24);
-			
+
 			// DOING THIS FOR NOW, MIGHT BE A QUICKER SOLUTION TO SPEED UP THE MAKEMOVE FUNCTION (like only having one loop or whatever)
 			for (int bPiece = Piece::P; bPiece <= Piece::K; bPiece++) {
 				Bitboards::occupancies[Colors::white] |= Bitboards::bitboards[bPiece];
@@ -272,7 +254,7 @@ namespace Sloth {
 		}
 	}
 
-	Position Position::parseFen(const char *fen) { // Will technically load the position
+	Position Position::parseFen(const char* fen) { // Will technically load the position
 		memset(Bitboards::bitboards, 0ULL, sizeof(Bitboards::bitboards)); // reset board position and state variables
 		memset(Bitboards::occupancies, 0ULL, sizeof(Bitboards::occupancies));
 
@@ -281,6 +263,9 @@ namespace Sloth {
 		castle = 0;
 
 		hashKey = 0ULL;
+
+		fifty = 0;
+
 		Search::repetitionIndex = 0;
 		memset(Search::repetitionTable, 0ULL, sizeof(Search::repetitionTable));
 
@@ -333,12 +318,12 @@ namespace Sloth {
 
 		while (*fen != ' ') {
 			switch (*fen) {
-				case 'K': castle |= WK; break;
-				case 'Q': castle |= WQ; break;
-				case 'k': castle |= BK; break;
-				case 'q': castle |= BQ; break;
-				case '-': break;
-				default: break;
+			case 'K': castle |= WK; break;
+			case 'Q': castle |= WQ; break;
+			case 'k': castle |= BK; break;
+			case 'q': castle |= BQ; break;
+			case '-': break;
+			default: break;
 			}
 
 			fen++;
@@ -401,29 +386,29 @@ namespace Sloth {
 			printf("\n");
 		}
 
-			printf("\n     a b c d e f g h\n\n");
+		printf("\n     a b c d e f g h\n\n");
 
-			printf("     Side:     %s\n", !sideToMove ? "white" : "black");
+		printf("     Side:     %s\n", !sideToMove ? "white" : "black");
 
-			const char* squareToCoordinates[] = {
-				"a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
-				"a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7",
-				"a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6",
-				"a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5",
-				"a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4",
-				"a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3",
-				"a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
-				"a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
-			};
+		const char* squareToCoordinates[] = {
+			"a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8",
+			"a7", "b7", "c7", "d7", "e7", "f7", "g7", "h7",
+			"a6", "b6", "c6", "d6", "e6", "f6", "g6", "h6",
+			"a5", "b5", "c5", "d5", "e5", "f5", "g5", "h5",
+			"a4", "b4", "c4", "d4", "e4", "f4", "g4", "h4",
+			"a3", "b3", "c3", "d3", "e3", "f3", "g3", "h3",
+			"a2", "b2", "c2", "d2", "e2", "f2", "g2", "h2",
+			"a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1",
+		};
 
-			printf("     Enpassant:   %s\n", (enPassant != no_sq) ? squareToCoordinates[enPassant] : "no");
+		printf("     Enpassant:   %s\n", (enPassant != no_sq) ? squareToCoordinates[enPassant] : "no");
 
-			printf("     Castling:  %c%c%c%c\n\n", (castle & WK) ? 'K' : '-',
-				(castle & WK) ? 'Q' : '-',
-				(castle & BK) ? 'k' : '-',
-				(castle & BQ) ? 'q' : '-');
+		printf("     Castling:  %c%c%c%c\n\n", (castle & WK) ? 'K' : '-',
+			(castle & WK) ? 'Q' : '-',
+			(castle & BK) ? 'k' : '-',
+			(castle & BQ) ? 'q' : '-');
 
-			printf("     Hash key: %llx\n", hashKey);
+		printf("     Hash key: %llx\n", hashKey);
 	}
 
 	inline int Position::isSquareAttacked(int square, int side) {
@@ -452,12 +437,26 @@ namespace Sloth {
 	}
 
 	U64 Position::attackersTo(int sq, U64 occ) {
-		return (bitboards[Piece::P] & pawnAttacks[black][sq]) |
-				(bitboards[Piece::p] & pawnAttacks[white][sq]) |
+		return (bitboards[Piece::P] & Bitboards::pawnAttacks[black][sq]) |
+			(bitboards[Piece::p] & Bitboards::pawnAttacks[white][sq]) |
 			(knightAttacks[sq] & (bitboards[Piece::N] | bitboards[Piece::n])) |
 			(kingAttacks[sq] & (bitboards[Piece::K] | bitboards[Piece::k])) |
 			(Magic::getRookAttacks(sq, occ) & (bitboards[Piece::R] | bitboards[Piece::r] | bitboards[Piece::Q] | bitboards[Piece::q])) |
 			(Magic::getBishopAttacks(sq, occ) & (bitboards[Piece::B] | bitboards[Piece::b] | bitboards[Piece::Q] | bitboards[Piece::q]));
+	}
+
+	U64 Position::pawnAttacks(int color) {
+		U64 result = 0;
+
+		// Calculate pawn attacks
+		U64 pawns = bitboards[color == Colors::white ? Piece::P : Piece::p];
+		while (pawns) {
+			int index = getLs1bIndex(pawns);
+			result |= Bitboards::pawnAttacks[color][index];
+			pawns &= pawns - 1;
+		}
+
+		return result;
 	}
 
 	U64 Position::attackedBy(int color) { // squares attacked by pieces of color
@@ -480,7 +479,7 @@ namespace Sloth {
 		U64 pawns = bitboards[color == Colors::white ? Piece::P : Piece::p];
 		while (pawns) {
 			int index = getLs1bIndex(pawns);
-			result |= pawnAttacks[color][index]; // Ensure you're using the correct color.
+			result |= Bitboards::pawnAttacks[color][index];
 			pawns &= pawns - 1;
 		}
 
@@ -509,6 +508,65 @@ namespace Sloth {
 		}
 
 		return result;
+	}
+
+	U64 Position::attackedTwice(int color) {
+		U64 attacked = 0;
+		U64 attackedTwice = 0;
+
+		auto updateAttacks = [&](U64 newAttacks) {
+			attackedTwice |= attacked & newAttacks;
+			attacked |= newAttacks;
+		};
+
+		// King attacks
+		U64 kingSquare = bitboards[color == Colors::white ? Piece::K : Piece::k];
+		updateAttacks(kingAttacks[getLs1bIndex(kingSquare)]);
+
+		// Knight attacks
+		U64 knights = bitboards[color == Colors::white ? Piece::N : Piece::n];
+		while (knights) {
+			int index = getLs1bIndex(knights);
+			updateAttacks(knightAttacks[index]);
+			knights &= knights - 1;
+		}
+
+		// Pawn attacks
+		U64 pawns = bitboards[color == Colors::white ? Piece::P : Piece::p];
+		while (pawns) {
+			int index = getLs1bIndex(pawns);
+			updateAttacks(Bitboards::pawnAttacks[color][index]);
+			pawns &= pawns - 1;
+		}
+
+		// Calculate sliding piece attacks
+		U64 occ = occupancies[both] ^ kingSquare;
+
+		// Rook attacks
+		U64 rooks = bitboards[color == Colors::white ? Piece::R : Piece::r];
+		while (rooks) {
+			int index = getLs1bIndex(rooks);
+			updateAttacks(Magic::getRookAttacks(index, occ));
+			rooks &= rooks - 1;
+		}
+
+		// Bishop attacks
+		U64 bishops = bitboards[color == Colors::white ? Piece::B : Piece::b];
+		while (bishops) {
+			int index = getLs1bIndex(bishops);
+			updateAttacks(Magic::getBishopAttacks(index, occ));
+			bishops &= bishops - 1;
+		}
+
+		// Queen attacks
+		U64 queens = bitboards[color == Colors::white ? Piece::Q : Piece::q];
+		while (queens) {
+			int index = getLs1bIndex(queens);
+			updateAttacks(Magic::getQueenAttacks(index, occ));
+			queens &= queens - 1;
+		}
+
+		return attackedTwice;
 	}
 
 	void Position::printAttackedSquares(int side) {

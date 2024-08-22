@@ -3,6 +3,8 @@
 
 #include <iostream>
 #include <unordered_map>
+#include <string>
+#include <sstream>
 
 #include "position.h"
 #include "piece.h"
@@ -55,6 +57,7 @@ namespace Sloth {
         extern std::unordered_map<Piece::Pieces, char> promotedPieces;
 
         extern inline void printMove(int move);
+        extern inline std::string moveToString(int move);
         extern inline void printMoveList(MoveList* moveList);
 
 		//extern inline void generateMoves(Position &pos, MoveList* moveCount);

@@ -36,18 +36,16 @@ int main(int argc, char* argv[])
     Eval::initEvalMasks();
     //game.parseFen(startPosition);
 
-    int debug = 0;
+    bool debug = false;
 
     if (debug) {
         Position pos;
 
         Movegen::MoveList movelist[1];
 
-        pos.parseFen("8/8/4p3/4P3/8/8/8/8 w - - 0 1");
+        pos.parseFen("8/8/8/8/3B3P/5N2/8/8 w - - 0 1");
        
         pos.printBoard();
-
-        Eval::evaluate(pos);
     } else UCI::loop();
 
     free(Search::hashTable);

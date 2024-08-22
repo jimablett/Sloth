@@ -66,6 +66,10 @@ namespace Sloth {
 		S(0,  12), S(0,  18), S(8,  18), S(0,   0),
 	};
 
+	const PieceScore knightKingDistScore[4] = {
+		S(-9,  -6), S(-12, -20), S(-27, -20), S(-47, -19),
+	};
+
 	U64 forwardRanksMasks[2][8];
 
 	static const PieceScore pawnShield[] = {
@@ -441,6 +445,7 @@ namespace Sloth {
 
 		int myKingSq = Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::K : Piece::k]);
 		int theirKingSq = Bitboards::getLs1bIndex(Bitboards::bitboards[white ? Piece::k : Piece::K]);
+
 		int distance = squareDistance(myKingSq, theirKingSq);
 
 		int distScore = 10 * (7 - distance);
@@ -468,12 +473,18 @@ namespace Sloth {
 			}
 		}
 		else {
-			U64 myQueens = Bitboards::bitboards[white ? Piece::Q : Piece::q];
-			U64 enemyQueenRooks = Bitboards::countBits(white ? Piece::q : Piece::Q) + Bitboards::countBits(white ? Piece::r : Piece::R);
+			distScore *= 2; // in case of a king queen vs king situation, we encourage the friendly king to move closer so that we can mate
 
-			if (Bitboards::countBits(myQueens) > 0 && enemyQueenRooks == 0) {
-				distScore *= 2; // in case of a king queen vs king situation, we encourage the friendly king to move closer so that we can mate
-			}
+			// force enemy king to the corner for mating
+			int enemyFile = getFile(theirKingSq);
+			int enemyRank = getRank(theirKingSq);
+
+			int centerDistFile = std::max(3 - enemyFile, enemyFile - 4);
+			int centerDistRank = std::max(3 - enemyRank, enemyRank - 4);
+
+			int cornerScore = (centerDistFile + centerDistRank) * 4;
+
+			scorePiece(&score, cornerScore, cornerScore);
 		}
 
 		scorePiece(&score, distScore, distScore);
@@ -486,7 +497,6 @@ namespace Sloth {
 		int w = 0;
 		int b = 0;
 
-		// might be a quicker and more efficient way to do this part
 		for (int p = Piece::N; p <= Piece::Q; p++)
 			w += Bitboards::countBits(Bitboards::bitboards[p]) * materialScore[opening][p];
 
@@ -525,7 +535,20 @@ namespace Sloth {
 			}
 		}
 
+		// try rook vs rook or queen vs queen draw
+		if (minors + pawns == 0
+			&& ((queens == 0 && Bitboards::countBits(Bitboards::bitboards[Piece::R]) + Bitboards::countBits(Bitboards::bitboards[Piece::r]) == 2)
+			|| (rooks == 0 && Bitboards::countBits(Bitboards::bitboards[Piece::Q]) + Bitboards::countBits(Bitboards::bitboards[Piece::q]) == 2))) {
+			return true;
+		}
+
 		return false;
+	}
+
+	inline bool Eval::isEndgame() {
+		int phaseScore = getGamePhaseScore();
+
+		return phaseScore < endgameScore;
 	}
 
 	inline int Eval::evaluate(Position& pos) {

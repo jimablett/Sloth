@@ -5,24 +5,23 @@
 
 namespace Sloth {
 
-	namespace Eval {
-		enum PieceTypes { PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NB_PIECE };
+    namespace Eval {
+        enum PieceTypes { PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, NB_PIECE };
 
-		extern U64 fileMasks[64];
-		extern U64 rankMasks[64];
+        extern U64 fileMasks[64];
+        extern U64 rankMasks[64];
 
-		extern U64 isolatedMasks[64]; // isolated pawns
-		extern U64 wPassedMasks[64]; // white passed pawns
-		extern U64 bPassedMasks[64]; // black
-		extern U64 orgthogonalDistance[64][64];
+        extern U64 isolatedMasks[64]; // isolated pawns
+        extern U64 wPassedMasks[64]; // white passed pawns
+        extern U64 bPassedMasks[64]; // black
+        extern U64 orgthogonalDistance[64][64];
 
-		//extern inline int evaluateClosedness();
+        U64 setFileRankMask(int fileNum, int rankNum);
+        void initEvalMasks();
 
-		U64 setFileRankMask(int fileNum, int rankNum);
-		void initEvalMasks();
-
-		extern inline int evaluate(Position& pos);
-	}
+        extern inline bool isEndgame();
+        extern inline int evaluate(Position& pos);
+    }
 }
 
 #endif

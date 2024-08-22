@@ -8,6 +8,8 @@
 
 #include "uci.h"
 
+#define clamp(x, lower, upper) ((x) < (lower) ? (lower) : ((x) > (upper) ? (upper) : (x)))
+
 namespace Sloth {
 
 	int Search::hashEntries = 0;
@@ -17,7 +19,6 @@ namespace Sloth {
 	U64 Search::repetitionTable[1000];
 	int Search::repetitionIndex = 0;
 
-	const int fullDepthMoves = 4;
 	const int reductionLimit = 3;
 
 	//int* pvLength = new int[MAX_PLY];
@@ -36,6 +37,12 @@ namespace Sloth {
 
 	int totalEntries = 0;
 	int usedEntries = 0;
+
+	int lastCurrmoveOutput = 0;
+	bool reportedCurrMove = false;
+
+	const int CURRMOVE_INITIAL_DELAY = 2500;
+	const int CURRMOVE_INTERVAL = 0;
 
 	const int lmpMargins[4] = { 0, 8, 12, 24 };
 	const int pieceValues[13] = { 100, 300, 300, 500, 900, VALUE_INFINITE, 100, 300, 300, 500, 900, VALUE_INFINITE, 0 };
@@ -201,7 +208,7 @@ namespace Sloth {
 		return score;
 	}
 
-	inline int Search::sortMoves(Movegen::MoveList* moveList, int bestMove, Position& pos) {
+	inline void Search::sortMoves(Movegen::MoveList* moveList, int bestMove, Position& pos) {
 		int* moveScores = new int[moveList->count];
 
 		for (int i = 0; i < moveList->count; i++) {
@@ -231,8 +238,6 @@ namespace Sloth {
 		}
 
 		delete[] moveScores; // free the memory
-
-		return 0;
 	}
 
 	static inline int isRepetition(Position& pos) {
@@ -410,11 +415,11 @@ namespace Sloth {
 		Search::sortMoves(moveList, 0, pos);
 
 		for (int c = 0; c < moveList->count; c++) {
-			int staticExchangeEvaluation = see(moveList->moves[c], pos);
 
-			if (staticExchangeEvaluation < 0) continue;
-
-			if (eval + 97 <= alpha && staticExchangeEvaluation <= 0) continue;
+			// ~10 elo
+			if (see(moveList->moves[c], pos) < -83) {
+				continue;
+			}
 
 			copyBoard(pos);
 
@@ -454,7 +459,11 @@ namespace Sloth {
 		return alpha;
 	}
 
+	static Search::SearchStack ss[MAX_PLY];
+
 	inline int Search::negamax(int alpha, int beta, int depth, bool cutnode, Position& pos) {
+
+		SearchStack* currentSS = &ss[Search::ply];
 
 		pvLength[Search::ply] = Search::ply; // inits the PV length
 
@@ -464,8 +473,9 @@ namespace Sloth {
 		int hashFlag = hashfALPHA;
 
 		bool pvNode = beta - alpha > 1;
+		bool isRoot = (Search::ply == 0);
 
-		if (Search::ply && isRepetition(pos)) return 0; // draw score, repetition has occured
+		if (Search::ply && (isRepetition(pos) || pos.fifty >= 100)) return 0; // draw score, repetition has occured
 
 		bool ttHit;
 
@@ -489,6 +499,10 @@ namespace Sloth {
 
 		if ((nodes & 2047) == 0) pos.time.communicate();
 
+		if (isRoot) {
+			lastCurrmoveOutput = pos.time.startTime - CURRMOVE_INTERVAL;
+		}
+
 		// recursion escape condition
 		if (depth == 0) return quiescence(alpha, beta, pos);
 
@@ -505,6 +519,19 @@ namespace Sloth {
 
 		int staticEval = Eval::evaluate(pos);
 
+		currentSS->staticEval = staticEval;
+
+		bool improving = false;
+
+		if (Search::ply >= 2) {
+			if (Search::ply >= 4 && ss[Search::ply - 2].staticEval == EVAL_UNKNOWN) {
+				improving = currentSS->staticEval > ss[Search::ply - 4].staticEval || ss[Search::ply - 4].staticEval == EVAL_UNKNOWN;
+			}
+			else {
+				improving = currentSS->staticEval > ss[Search::ply - 2].staticEval || ss[Search::ply - 2].staticEval == EVAL_UNKNOWN;
+			}
+		}	
+
 		if (ply && !pvNode && depth < 2 && (staticEval + 339) <= alpha) return quiescence(alpha, beta, pos);
 
 		if (depth < 3 && !pvNode && !kingCheck && abs(beta - 1) > -VALUE_INFINITE + 100) {
@@ -515,12 +542,13 @@ namespace Sloth {
 			}
 		}
 
-		if (staticEval - 80 * depth >= beta && !kingCheck && depth < 9 && !pvNode) {
+		// New beta pruning (~53 elo)
+		if (!pvNode && !kingCheck && depth <= 8 && staticEval - 65 * std::max(0, (depth - improving)) >= beta) {
 			return staticEval;
 		}
 
 		// null move pruning
-		if (depth >= 3 && kingCheck == 0 && Search::ply) {
+		if (depth >= 3 && !kingCheck && Search::ply && !Eval::isEndgame()) {
 			copyBoard(pos);
 
 			Search::ply++;
@@ -585,22 +613,25 @@ namespace Sloth {
 			}
 		}
 
-		// internal iterative reductions
-		if (cutnode && depth >= 8 && (!ttMove || ttFlag == hashfALPHA)) depth -= 1 + !ttMove;
-
-		Movegen::MoveList moveList[1];
-
-		Movegen::generateMoves(pos, moveList, false);
-
 		// ProbCut
-
 		int probCutBeta = std::min(beta + 227, MATE_VALUE - MAX_PLY - 1);
 
 		if (depth >= 6 && !pvNode && !kingCheck && ply > 0 && !(ttDepth >= depth - 3 && ttEval != EVAL_UNKNOWN && ttEval < probCutBeta)) {
 			int probCutBeta = beta + 172;
 			int reducedDepth = depth - 4;
 
-			for (int c = 0; c < moveList->count; c++) {
+			Movegen::MoveList captureList[1];
+			Movegen::generateMoves(pos, captureList, true);
+
+			sortMoves(captureList, 0, pos);
+
+			for (int c = 0; c < captureList->count; c++) {
+
+				if (pos.time.stopped) return 0;
+
+				if (see(captureList->moves[c], pos) < 0) {
+					continue;
+				}
 
 				copyBoard(pos);
 
@@ -609,7 +640,7 @@ namespace Sloth {
 				Search::repetitionIndex++;
 				Search::repetitionTable[Search::repetitionIndex] = pos.hashKey;
 
-				if (pos.makeMove(pos, moveList->moves[c], allMoves) == 0) {
+				if (pos.makeMove(pos, captureList->moves[c], allMoves) == 0) {
 					Search::ply--;
 
 					Search::repetitionIndex--;
@@ -620,7 +651,7 @@ namespace Sloth {
 				score = -quiescence(-probCutBeta, -probCutBeta + 1, pos);
 
 				if (score >= probCutBeta) {
-					score = -negamax(-probCutBeta, -probCutBeta + 1, depth - 4, !cutnode, pos);
+					score = -negamax(-probCutBeta, -probCutBeta + 1, reducedDepth, !cutnode, pos);
 				}
 
 				Search::ply--;
@@ -629,12 +660,16 @@ namespace Sloth {
 				takeBack(pos);
 
 				if (score >= probCutBeta) {
-					writeHashEntry(score, moveList->moves[c], depth, hashfBETA, pos);
+					writeHashEntry(score, captureList->moves[c], depth - 4, hashfBETA, pos);
 
 					return score;
 				}
 			}
 		}
+
+		Movegen::MoveList moveList[1];
+
+		Movegen::generateMoves(pos, moveList, false);
 
 		if (followPV) {
 			enablePVScoring(moveList);
@@ -660,6 +695,24 @@ namespace Sloth {
 				Search::repetitionIndex--;
 
 				continue; // skip to next move
+			}
+
+			reportedCurrMove = false;
+
+			if (isRoot && !reportedCurrMove) {
+				int now = pos.time.getTimeMs();
+				int elapsed = now - pos.time.startTime;
+				int elapsedSinceLast = now - lastCurrmoveOutput;
+
+				if (elapsed >= CURRMOVE_INITIAL_DELAY && elapsedSinceLast >= CURRMOVE_INTERVAL) {
+					printf("info depth %d currmove %s currmovenumber %d\n",
+						depth,
+						Movegen::moveToString(move),
+						c + 1);
+
+					lastCurrmoveOutput = now;
+					reportedCurrMove = true;
+				}
 			}
 
 			legalMoves++;
@@ -696,7 +749,7 @@ namespace Sloth {
 				}
 
 				// LMR
-				if (movesSearched >= fullDepthMoves && depth >= reductionLimit && kingCheck == 0 && getMoveCapture(move) == 0 && getMovePromotion(move) == 0) {
+				if (movesSearched > 1 && depth >= reductionLimit && kingCheck == 0 && getMoveCapture(move) == 0 && getMovePromotion(move) == 0) {
 					int R = 1 + depth / 4;
 
 					if (pvNode) R--;
@@ -755,8 +808,6 @@ namespace Sloth {
 						killerMoves[0][Search::ply] = move;
 					}
 
-					//report(score, depth, pos);
-
 					return beta;
 				}
 			}
@@ -783,7 +834,7 @@ namespace Sloth {
 			return Search::negamax(-VALUE_INFINITE, VALUE_INFINITE, depth, false, pos);
 		}
 
-		int delta = 100;
+		int delta = 50;
 		int alpha = std::max(score - delta, -VALUE_INFINITE);
 		int beta = std::min(score + delta, VALUE_INFINITE);
 
@@ -819,6 +870,8 @@ namespace Sloth {
 		memset(historyMoves, 0, sizeof(historyMoves));
 		memset(pvTable, 0, sizeof(pvTable));
 		memset(pvLength, 0, sizeof(pvLength));
+
+		memset(ss, 0, sizeof(ss));
 
 		int alpha = -VALUE_INFINITE;
 		int beta = VALUE_INFINITE;

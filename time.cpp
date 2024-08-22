@@ -11,7 +11,7 @@
 
 namespace Sloth {
 	int Time::getTimeMs() {
-		return GetTickCount();
+		return GetTickCount64();
 	}
 
 	int Time::inputWaiting() {

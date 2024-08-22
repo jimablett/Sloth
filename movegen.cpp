@@ -1,5 +1,6 @@
 #include <iostream>
 #include <unordered_map>
+#include <string>
 
 #include "movegen.h"
 #include "bitboards.h"
@@ -44,6 +45,23 @@ namespace Sloth {
 		}
 	}
 
+	inline std::string Movegen::moveToString(int move) {
+		std::stringstream ss;
+
+		if (getMovePromotion(move)) {
+			Piece::Pieces promotion = static_cast<Piece::Pieces>(getMovePromotion(move));
+			ss << squareToCoordinates[getMoveSource(move)]
+				<< squareToCoordinates[getMoveTarget(move)]
+				<< promotedPieces[promotion];
+		}
+		else {
+			ss << squareToCoordinates[getMoveSource(move)]
+				<< squareToCoordinates[getMoveTarget(move)];
+		}
+
+		return ss.str();
+	}
+
 	inline void Movegen::printMoveList(MoveList* moveList) {
 
 		if (!moveList->count) {
@@ -76,7 +94,7 @@ namespace Sloth {
 
 		for (int piece = Piece::P; piece <= Piece::k; piece++) {
 			bb = Bitboards::bitboards[piece];
-
+			
 			// white pawns and white king castling moves
 			if (pos.sideToMove == Colors::white) {
 				if (piece == Piece::P) {
@@ -97,7 +115,7 @@ namespace Sloth {
 							}
 							else {
 								// pawn promotion
-								if (sourceSquare >= a7 && sourceSquare <= h7) { // BE AWARE: a7 and h7 is not the same as it is in tutorial (8 and 15 replaces)
+								if (sourceSquare >= a7 && sourceSquare <= h7) {
 									addMove(moveList, encodeMove(sourceSquare, target, piece, Piece::Q, 0, 0, 0, 0));
 									addMove(moveList, encodeMove(sourceSquare, target, piece, Piece::R, 0, 0, 0, 0));
 									addMove(moveList, encodeMove(sourceSquare, target, piece, Piece::B, 0, 0, 0, 0));
@@ -247,6 +265,7 @@ namespace Sloth {
 						popBit(bb, sourceSquare);
 					}
 				}
+
 				if (!captures) {
 					if (piece == Piece::k) {
 						if (pos.castle & CastlingRights::BK) { // castling king
@@ -307,6 +326,7 @@ namespace Sloth {
 
 					while (attacks) {
 						target = Bitboards::getLs1bIndex(attacks);
+
 						if (captures) {
 							if (getBit(((pos.sideToMove == Colors::white) ? Bitboards::occupancies[Colors::black] : Bitboards::occupancies[Colors::white]), target)) {
 								addMove(moveList, encodeMove(sourceSquare, target, piece, 0, 1, 0, 0, 0));

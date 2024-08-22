@@ -74,7 +74,7 @@ namespace Sloth {
 
 	void UCI::parsePosition(Position& pos, const char* command) {
 		command += 9; // shift pointer past "position" (Like in "position startpos")
-		
+
 		// allocate memory for copy of const char* command
 		char* cmdCpy = new char[strlen(command) + 1];
 		strcpy_s(cmdCpy, sizeof(char) * (strlen(command) + 1), command);
@@ -127,7 +127,7 @@ namespace Sloth {
 		// free the allocated memory
 		delete[] cmdCpy;
 	}
-	
+
 	void resetTimeControl(Position& pos) {
 		pos.time.quit = false;
 		pos.time.movesToGo = 30;
@@ -241,7 +241,7 @@ namespace Sloth {
 				printf("readyok\n");
 
 				continue;
-			} 
+			}
 			else if (strncmp(input, "position", 8) == 0) {
 				parsePosition(game, input);
 

@@ -25,7 +25,6 @@ namespace Sloth {
 
 	void Bitboards::printBitboard(U64 bb, bool flip) {
 
-		// OLD
 		if (flip) {
 			for (int rank = 7; rank >= 0; rank--) {
 				for (int file = 0; file < 8; file++) {

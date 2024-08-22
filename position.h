@@ -46,7 +46,9 @@ namespace Sloth {
 
 		inline int isSquareAttacked(int square, int side);
 		U64 attackersTo(int square, U64 occ);
+		U64 pawnAttacks(int color);
 		U64 attackedBy(int color);
+		U64 attackedTwice(int color);
 
 		// temp
 		void printAttackedSquares(int side);

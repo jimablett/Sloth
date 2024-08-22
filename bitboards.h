@@ -5,19 +5,16 @@
 #include <cassert>
 #include <vector>
 
-//using bitboard = uint64_t;
-
 #define setBit(bb, sq) (bb |= (1ULL << sq))
 #define getBit(bb, sq) (bb & (1ULL << sq))
 #define removeBit(bb, sq) (bb &= ~(1ULL << sq))
 #define popBit(bb, sq) (getBit(bb, sq) ? bb ^= (1ULL << sq) : 0) // invert bit
 
 typedef uint64_t U64;
-//typedef unsigned long long U64;
 
 namespace Sloth {
+
 	namespace Bitboards {
-		// 12 bitboards, each piece for each color
 
 		extern const U64 notAFile;
 		extern const U64 notHFile;
@@ -29,7 +26,7 @@ namespace Sloth {
 		extern U64 knightAttacks[64]; // [square]
 		extern U64 kingAttacks[64];
 
-		// MIGHT DELETE
+		// 12 bitboards, each piece and each color
 		extern U64 bitboards[12];
 		extern U64 occupancies[3]; // This will hold every piece on one bitboard. One for every white piece combined, one for black combined and one with every piece of both color on the bitboard
 
